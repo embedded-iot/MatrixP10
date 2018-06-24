@@ -22,27 +22,48 @@ void setup() {
   pinMode(2, OUTPUT);
   digitalWrite(2, 0);
   
-  // Connect to WiFi network
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
+  // ConnectAP();
+  StartWebServer();
+  ConvertStringToArrayChar("d đ", true);
+  ConvertStringToArrayChar("d đ", false);
+
+  ConvertStringToArrayChar("a á à ạ ả ã", true);
+  ConvertStringToArrayChar("a á à ạ ả ã", false);
+
+  ConvertStringToArrayChar("â ấ ầ ậ ẩ ẫ", true);
+  ConvertStringToArrayChar("â ấ ầ ậ ẩ ẫ", false);
+
+  ConvertStringToArrayChar("ă ắ ằ ặ ẳ ẵ", true);
+  ConvertStringToArrayChar("ă ắ ằ ặ ẳ ẵ", false);
+
+  ConvertStringToArrayChar("e é è ẹ ẻ ẽ", true);
+  ConvertStringToArrayChar("e é è ẹ ẻ ẽ", false);
   
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  ConvertStringToArrayChar("ê ế ề ệ ể ễ", true);
+  ConvertStringToArrayChar("ê ế ề ệ ể ễ", false);
+
+
+  ConvertStringToArrayChar("i í ì ị ỉ ĩ", true);
+  ConvertStringToArrayChar("i í ì ị ỉ ĩ", false);
+
+  ConvertStringToArrayChar("o ó ò ọ ỏ õ", true);
+  ConvertStringToArrayChar("o ó ò ọ ỏ õ", false);
+
+  ConvertStringToArrayChar("ô ố ồ ộ ổ ỗ", true);
+  ConvertStringToArrayChar("ô ố ồ ộ ổ ỗ", false);
+
+  ConvertStringToArrayChar("ơ ớ ờ ợ ở ỡ", true);
+  ConvertStringToArrayChar("ơ ớ ờ ợ ở ỡ", false);
+
+  ConvertStringToArrayChar("u ú ù ụ ủ ũ", true);
+  ConvertStringToArrayChar("u ú ù ụ ủ ũ", false);
   
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
-  
-  // Print the IP address
-  Serial.println(WiFi.localIP());
-  server.on("/", web);
-  server.begin();
-  Serial.println("HTTP server started");
+  ConvertStringToArrayChar("ư ứ ừ ự ử ữ", true);
+  ConvertStringToArrayChar("ư ứ ừ ự ử ữ", false);
+
+  ConvertStringToArrayChar("y ý ỳ ỵ ỷ ỹ", true);
+  ConvertStringToArrayChar("y ý ỳ ỵ ỷ ỹ", false);
+
 }
 
 void loop() {
@@ -124,10 +145,175 @@ void GiaTriThamSo()
   }
 }
 
-void ConvertString(String s1) {
-  Serial.println('a');
-  Serial.println('á');
-  Serial.println('à');
-  Serial.println('ạ');
-  Serial.println('ả');
+void ConnectAP(){
+  // Connect to WiFi network
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  
+  // Print the IP address
+  Serial.println(WiFi.localIP());
 }
+void StartWebServer() {
+  server.on("/", web);
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+
+void ConvertStringToArrayChar(String x, bool display) {
+  int length = x.length();
+  if (display) {
+    Serial.println("\n" + x);
+    Serial.println("length :" + String(length));
+  }
+  char *y = new char[length + 1]; // or
+  strcpy(y, x.c_str());
+  if (display) {
+    while (*y) {
+      if (*y == ' ') {
+        Serial.println("  ");
+      } else {
+        Serial.print((int)*y);
+        Serial.print(" ");
+      }
+      *y++;
+    }
+  }
+  else {
+    Serial.println("");
+    for (int i = 0; i < length; i++) {
+      if (y[i] < 128) {
+        Serial.print(y[i]);
+      } else if (y[i] < 225) {
+        String tg = "_";
+        if (y[i] == 195 && i < length - 1) {
+          if (y[i+1] == 161) tg = "á";
+          else if (y[i+1] == 160) tg = "à";
+          else if (y[i+1] == 163) tg = "ã";
+
+          else if (y[i+1] == 162) tg = "â";
+
+          else if (y[i+1] == 169) tg = "é";
+          else if (y[i+1] == 168) tg = "è";
+
+          else if (y[i+1] == 170) tg = "ê";
+
+          else if (y[i+1] == 173) tg = "í";
+          else if (y[i+1] == 172) tg = "ì";
+
+          else if (y[i+1] == 179) tg = "ó";
+          else if (y[i+1] == 178) tg = "ò";
+          else if (y[i+1] == 181) tg = "õ";
+
+          else if (y[i+1] == 180) tg = "ô";
+
+          else if (y[i+1] == 186) tg = "ú";
+          else if (y[i+1] == 185) tg = "ù";
+
+          else if (y[i+1] == 189) tg = "ý";
+
+        } else if (y[i] == 196 && i < length - 1) {
+          if (y[i+1] == 131) tg = "ă";
+
+          else if (y[i+1] == 169) tg = "ĩ";
+
+          else if (y[i+1] == 145) tg = "đ";
+          
+        } else if (y[i] == 197 && i < length - 1) {
+          if (y[i+1] == 169) tg = "ũ";
+
+          // else if (y[i+1] == 169) tg = "ĩ";
+          
+        } else if (y[i] == 198 && i < length - 1) {
+          if (y[i+1] == 161) tg = "ơ";
+
+          else if (y[i+1] == 176) tg = "ư";
+        }
+
+        Serial.print(tg);
+        i = i + 1;
+      } else {
+        String tg = "=";
+        if (y[i] == 225 && i < length - 1) {
+          if (y[i+1] == 186 && i + 1 < length - 1) {
+            if (y[i+2] == 161) tg = "ạ";
+            else if (y[i+2] == 163) tg = "ả";
+
+            else if (y[i+2] == 165) tg = "ấ";
+            else if (y[i+2] == 167) tg = "ầ";
+            else if (y[i+2] == 173) tg = "ậ";
+            else if (y[i+2] == 169) tg = "ẩ";
+            else if (y[i+2] == 171) tg = "ẫ";
+
+            else if (y[i+2] == 175) tg = "ắ";
+            else if (y[i+2] == 177) tg = "ằ";
+            else if (y[i+2] == 183) tg = "ặ";
+            else if (y[i+2] == 179) tg = "ẳ";
+            else if (y[i+2] == 181) tg = "ẵ";
+
+            else if (y[i+2] == 185) tg = "ẹ";
+            else if (y[i+2] == 187) tg = "ẻ";
+            else if (y[i+2] == 189) tg = "ẽ";
+            else if (y[i+2] == 191) tg = "ế";
+
+          } else if (y[i+1] == 187 && i + 1 < length - 1) {
+            
+            if (y[i+2] == 129) tg = "ề";
+            else if (y[i+2] == 135) tg = "ệ";
+            else if (y[i+2] == 131) tg = "ể";
+            else if (y[i+2] == 133) tg = "ễ";
+
+            else if (y[i+2] == 139) tg = "ị";
+            else if (y[i+2] == 137) tg = "ỉ";
+
+            else if (y[i+2] == 141) tg = "ọ";
+            else if (y[i+2] == 143) tg = "ỏ";
+
+            else if (y[i+2] == 145) tg = "ố";
+            else if (y[i+2] == 147) tg = "ồ";
+            else if (y[i+2] == 153) tg = "ộ";
+            else if (y[i+2] == 149) tg = "ổ";
+            else if (y[i+2] == 151) tg = "ỗ";
+
+            else if (y[i+2] == 155) tg = "ớ";
+            else if (y[i+2] == 157) tg = "ờ";
+            else if (y[i+2] == 163) tg = "ợ";
+            else if (y[i+2] == 159) tg = "ở";
+            else if (y[i+2] == 161) tg = "ỡ";
+
+            else if (y[i+2] == 165) tg = "ụ";
+            else if (y[i+2] == 167) tg = "ủ";
+
+            else if (y[i+2] == 169) tg = "ứ";
+            else if (y[i+2] == 171) tg = "ừ";
+            else if (y[i+2] == 177) tg = "ự";
+            else if (y[i+2] == 173) tg = "ử";
+            else if (y[i+2] == 175) tg = "ữ";
+
+            else if (y[i+2] == 179) tg = "ỳ";
+            else if (y[i+2] == 181) tg = "ỵ";
+            else if (y[i+2] == 183) tg = "ỷ";
+            else if (y[i+2] == 185) tg = "ỹ";
+
+          }       
+        }
+        Serial.print(tg);
+        i = i + 2;
+      }
+    }
+  }
+}
+
+
