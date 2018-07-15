@@ -113,7 +113,9 @@ void setup() {
   s1 = ConvertStringToArrayChar("YÝỲỴỶỸ", false);
   ShowArray(s1);
 
-  dmd.setBrightness(255);
+  ConvertStringToArrayChar("Ư Ứ Ừ Ự Ử Ữ", true);
+
+  dmd.setBrightness(1);
   dmd.selectFont(Font_1);
   dmd.begin();
   //  clear/init the DMD pixels held in RAM
@@ -122,7 +124,7 @@ void setup() {
 
 void loop() {
 //  server.handleClient();
-//  testString();
+ testString();
 //  testScroll();
 }
 
@@ -248,7 +250,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
     }
   }
   else {
-    println("");
+    // println("");
     for (int i = 0; i < length; i++) {
       char c = 0;
       if (y[i] < 128) {
@@ -307,7 +309,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
           else if (y[i+1] == 154) { tg = "Ú"; c = 246; }
           else if (y[i+1] == 153) { tg = "Ù"; c = 247; }
 
-          else if (y[i+1] == 157) { tg = "Ý"; c = 151; }
+          else if (y[i+1] == 157) { tg = "Ý"; c = 256; }
 
 
         } else if (y[i] == 196 && i < length - 1) {
@@ -327,7 +329,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
         } else if (y[i] == 197 && i < length - 1) {
           if (y[i+1] == 169) { tg = "ũ"; c = 183; }
 
-          else if (y[i+1] == 168) { tg = "Ũ"; c = 150; }
+          else if (y[i+1] == 168) { tg = "Ũ"; c = 250; }
           
         } else if (y[i] == 198 && i < length - 1) {
           if (y[i+1] == 161) { tg = "ơ"; c = 173; }
@@ -338,7 +340,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
 
         }
         resultConvert[len++] = c;
-        Serial.print(tg);
+        // Serial.print(tg);
         i = i + 1;
       } else {
         String tg = "=";
@@ -452,17 +454,17 @@ char* ConvertStringToArrayChar(String x, bool display) {
             else if (y[i+2] == 164) { tg = "Ụ"; c = 248; }
             else if (y[i+2] == 166) { tg = "Ủ"; c = 249; }
 
-            else if (y[i+2] == 178) { tg = "Ỳ"; c = 252; }
-            else if (y[i+2] == 180) { tg = "Ỵ"; c = 253; }
-            else if (y[i+2] == 182) { tg = "Ỷ"; c = 254; }
-            else if (y[i+2] == 184) { tg = "Ỹ"; c = 255; }
+            else if (y[i+2] == 178) { tg = "Ỳ"; c = 257; }
+            else if (y[i+2] == 180) { tg = "Ỵ"; c = 258; }
+            else if (y[i+2] == 182) { tg = "Ỷ"; c = 259; }
+            else if (y[i+2] == 184) { tg = "Ỹ"; c = 260; }
 
 
 
           }
           resultConvert[len++] = c;       
         }
-        Serial.print(tg);
+        // Serial.print(tg);
         i = i + 2;
       }
     }
@@ -487,32 +489,49 @@ void println(String s) {
 void testString() {
   dmd.selectFont(Font_1);
   const char *MSG ; 
-  const String arrayMsg[50] = {"aáàạảã", "ăắằặẳẵ", "âấầậẩẫ", "dđ", "eéèẹẻẽ", "êếềệểễ", "iíìịỉĩ", "oóòọỏõ","ôốồộổỗ", "ơớờợởỡ", "uúùụủũ","ưứừựửữ","yýỳỵỷỹ","abcde","fghij","klmno","pqrst","uvwxyz","01234","56789","ABCDE", "FGHIJ", "KLMNO","KLMNO", "PQRST", "UVWXYZ"};
-  MSG = ConvertStringToArrayChar("aáàạảã", false);
-  MSG = ConvertStringToArrayChar("ăắằặẳẵ", false);
-  MSG = ConvertStringToArrayChar("âấầậẩẫ", false);
-  MSG = ConvertStringToArrayChar("dđ", false);
-  MSG = ConvertStringToArrayChar("eéèẹẻẽ", false);
-  MSG = ConvertStringToArrayChar("êếềệểễ", false);
-  MSG = ConvertStringToArrayChar("iíìịỉĩ", false);
-  MSG = ConvertStringToArrayChar("oóòọỏõ", false);
-  MSG = ConvertStringToArrayChar("ôốồộổỗ", false);
-  MSG = ConvertStringToArrayChar("ơớờợởỡ", false);
-  MSG = ConvertStringToArrayChar("uúùụủũ", false);
-  MSG = ConvertStringToArrayChar("ưứừựửữ", false);
-  MSG = ConvertStringToArrayChar("yýỳỵỷỹ", false);
-  MSG = ConvertStringToArrayChar("abcde", false);
-  MSG = ConvertStringToArrayChar("fghij", false);
-  MSG = ConvertStringToArrayChar("klmno", false);
-  MSG = ConvertStringToArrayChar("pqrst", false);
-  MSG = ConvertStringToArrayChar("uvwxyz", false);
-  MSG = ConvertStringToArrayChar("01234", false);
-  MSG = ConvertStringToArrayChar("56789", false);
-  MSG = ConvertStringToArrayChar("ABCDE", false);
-  MSG = ConvertStringToArrayChar("FGHIJ", false);
-  MSG = ConvertStringToArrayChar("KLMNO", false);
-  MSG = ConvertStringToArrayChar("PQRST", false);
-  MSG = ConvertStringToArrayChar("UVWXYZ", false);
+  // const String arrayMsg[50] = {"aáàạảã", "ăắằặẳẵ", "âấầậẩẫ", "dđ", "eéèẹẻẽ", "êếềệểễ", "iíìịỉĩ", "oóòọỏõ","ôốồộổỗ", "ơớờợởỡ", "uúùụủũ","ưứừựửữ","yýỳỵỷỹ","abcde","fghij","klmno","pqrst","uvwxyz","01234","56789","ABCDE", "FGHIJ", "KLMNO","KLMNO", "PQRST", "UVWXYZ"};
+  // MSG = ConvertStringToArrayChar("aáàạảã", false);
+  // MSG = ConvertStringToArrayChar("ăắằặẳẵ", false);
+  // MSG = ConvertStringToArrayChar("âấầậẩẫ", false);
+  // MSG = ConvertStringToArrayChar("dđ", false);
+  // MSG = ConvertStringToArrayChar("eéèẹẻẽ", false);
+  // MSG = ConvertStringToArrayChar("êếềệểễ", false);
+  // MSG = ConvertStringToArrayChar("iíìịỉĩ", false);
+  // MSG = ConvertStringToArrayChar("oóòọỏõ", false);
+  // MSG = ConvertStringToArrayChar("ôốồộổỗ", false);
+  // MSG = ConvertStringToArrayChar("ơớờợởỡ", false);
+  // MSG = ConvertStringToArrayChar("uúùụủũ", false);
+  // MSG = ConvertStringToArrayChar("ưứừựửữ", false);
+  // MSG = ConvertStringToArrayChar("yýỳỵỷỹ", false);
+  // MSG = ConvertStringToArrayChar("abcde", false);
+  // MSG = ConvertStringToArrayChar("fghij", false);
+  // MSG = ConvertStringToArrayChar("klmno", false);
+  // MSG = ConvertStringToArrayChar("pqrst", false);
+  // MSG = ConvertStringToArrayChar("uvwxyz", false);
+  // MSG = ConvertStringToArrayChar("01234", false);
+  // MSG = ConvertStringToArrayChar("56789", false);
+  // MSG = ConvertStringToArrayChar("ABCDE", false);
+  // MSG = ConvertStringToArrayChar("FGHIJ", false);
+  // MSG = ConvertStringToArrayChar("KLMNO", false);
+  // MSG = ConvertStringToArrayChar("PQRST", false);
+  // MSG = ConvertStringToArrayChar("UVWXYZ", false);
+
+
+  MSG = ConvertStringToArrayChar("AÁÀẠẢÃ", false);
+  MSG = ConvertStringToArrayChar("ĂẮẰẶẲẴ", false);
+  MSG = ConvertStringToArrayChar("ẮẰẶẲẴ", false);
+  MSG = ConvertStringToArrayChar("ÂẤẦẬẨẪ", false);
+  MSG = ConvertStringToArrayChar("DĐ", false);
+  MSG = ConvertStringToArrayChar("EÉÈẸẺẼ", false);
+  MSG = ConvertStringToArrayChar("ÊẾỀỆỂỄ", false);
+  MSG = ConvertStringToArrayChar("IÍÌỊỈĨ", false);
+  MSG = ConvertStringToArrayChar("OÓÒỌỎÕ", false);
+  MSG = ConvertStringToArrayChar("ÔỐỒỘỔỖ", false);
+  MSG = ConvertStringToArrayChar("ỐỒỘỔỖ", false);
+  MSG = ConvertStringToArrayChar("ƠỚỜỢỞỠ", false);
+  MSG = ConvertStringToArrayChar("ỚỜỢỞỠ", false);
+  MSG = ConvertStringToArrayChar("UÚÙỤỦŨ", false);
+  MSG = ConvertStringToArrayChar("YÝỲỴỶỸ", false);
 //  for (int i = 0; i < 26; i++) {
 //    dmd.fillScreen(false);
 //    MSG = ConvertStringToArrayChar(arrayMsg[i], false);
@@ -520,9 +539,8 @@ void testString() {
 //    delay(2000);
 //  }
     dmd.fillScreen(false);
-    MSG = ConvertStringToArrayChar("Cẩm-Phả - Quảng Ninh", false);
     dmd.drawString(0,0, MSG, GRAPHICS_ON); 
-    delay(2000);
+    delay(10000);
 }
 DMD_TextBox box(dmd);  // "box" provides a text box to automatically write to/scroll the display
 void testScroll() {
