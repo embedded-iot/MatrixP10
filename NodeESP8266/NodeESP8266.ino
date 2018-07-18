@@ -31,23 +31,18 @@ ESP8266WebServer server(80);
 #define DEBUGGING
 
 #define ADDR 0
-#define ADDR_STASSID (ADDR)
-#define ADDR_STAPASS (ADDR_STASSID+20)
-#define ADDR_STAIP (ADDR_STAPASS+20)
-#define ADDR_STAGATEWAY (ADDR_STAIP+20)
-#define ADDR_STASUBNET (ADDR_STAGATEWAY+20)
-
-#define ADDR_APSSID (ADDR_STASUBNET+20)
+#define ADDR_APSSID ADDR
 #define ADDR_APPASS (ADDR_APSSID+20)
-#define ADDR_APIP (ADDR_APPASS+20)
-#define ADDR_APGATEWAY (ADDR_APIP+20)
-#define ADDR_APSUBNET (ADDR_APGATEWAY+20)
+#define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
 
 #define NAME_DEFAULT "MBELL"
+#define PASS_DEFAULT "1234567890"
 #define STA_SSID_DEFAULT "TTQ"
 #define STA_PASS_DEFAULT "0987654321"
 #define AP_SSID_DEFAULT NAME_DEFAULT
-#define AP_PASS_DEFAULT "04081984"
+#define AP_PASS_DEFAULT PASS_DEFAULT
+
+#define PASS_LOGIN_DEFAULT ""
 
 #define TIME_LIMIT_RESET 3000
 
@@ -58,6 +53,7 @@ bool isLogin = false;
 String staSSID, staPASS;
 String apSSID, apPASS;
 String SoftIP, LocalIP;
+String passLogin;
 int idWebSite = 0;
 long timeLogout = 120000;
 long t = 0;
@@ -67,7 +63,7 @@ void setup()
   delay(500);
   Serial.begin(115200);
   Serial.println();
-  EEPROM.begin(512);
+  BeginEEPROM();
   GPIO();
   idWebSite = 0;
   isLogin = false;
@@ -79,7 +75,7 @@ void setup()
   ReadConfig();
   WiFi.mode(WIFI_AP_STA);
   delay(2000);
-  ConnectWifi(15000); 
+  ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000); 
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.mode(WIFI_AP);
     show("Set WIFI_AP");
@@ -173,30 +169,26 @@ int ListenIdRF()
 void ConfigDefault()
 {
   isLogin = false;
-  staSSID = STA_SSID_DEFAULT;
-  staPASS = STA_PASS_DEFAULT;
   apSSID = AP_SSID_DEFAULT;
   apPASS = AP_PASS_DEFAULT;
+  passLogin =  PASS_LOGIN_DEFAULT;
   show("Config Default");
 }
 void WriteConfig()
 {
-  SaveStringToEEPROM(staSSID, ADDR_STASSID);
-  SaveStringToEEPROM(staPASS, ADDR_STAPASS);
   SaveStringToEEPROM(apSSID, ADDR_APSSID);
   SaveStringToEEPROM(apPASS, ADDR_APPASS);
-
+  SaveStringToEEPROM(passLogin, ADDR_PASS_LOGIN);
   show("Write Config");
 }
 void ReadConfig()
 {
-  staSSID = ReadStringFromEEPROM(ADDR_STASSID);
-  staPASS = ReadStringFromEEPROM(ADDR_STAPASS);
   apSSID = ReadStringFromEEPROM(ADDR_APSSID);
   apPASS = ReadStringFromEEPROM(ADDR_APPASS);
+  passLogin = ReadStringFromEEPROM(ADDR_PASS_LOGIN);
   show("Read Config");
-  show("Station: \n" + staSSID + "\n" + staPASS);
   show("Access Point: \n" + apSSID + "\n" + apPASS);
+  show("Pass login: \n" + passLogin);
 }
 
 void AccessPoint()
@@ -212,15 +204,14 @@ void AccessPoint()
   show(SoftIP);
 }
 
-void ConnectWifi(long timeOut)
+void ConnectWifi(String ssid, String password, long timeOut)
 {
   show("Connect to other Access Point");
   // delay(1000);
   int count = timeOut / 500;
   show("Connecting");
-  show(staSSID);
-  show(staPASS);
-  WiFi.begin(staSSID.c_str(),staPASS.c_str());
+  show(ssid + "-" + password);
+  WiFi.begin(ssid.c_str(),password.c_str());
   while (WiFi.status() != WL_CONNECTED && --count > 0) {
     delay(500);
     Serial.print(".");
@@ -238,9 +229,10 @@ void ConnectWifi(long timeOut)
 
 void StartServer()
 {
-  server.on("/", webConfig);
-  server.on("/rfconfig", webRFConfig);
+  server.on("/config", webConfig);
   server.on("/home", webViewHome);
+  server.on("/message", webConfigMessage);
+  server.on("/", webListMessage);
   server.onNotFound(handleNotFound);
   server.begin();
   show("HTTP server started");
@@ -260,18 +252,22 @@ void webConfig() {
   }else html += ContentLogin();
   server.send ( 200, "text/html",html);
 }
-void webRFConfig() {
-  String html = Title();
-  html += ChannelRFConfig();
-  server.send ( 200, "text/html",html);
-}
 
 void webViewHome() {
   String html = Title();
   // html += webView();
   server.send ( 200, "text/html",html);
 }
-
+void webConfigMessage() {
+  String html = Title();
+  html += configMessage();
+  server.send ( 200, "text/html",html);
+}
+void webListMessage() {
+  String html = Title();
+  html += listMessage();
+  server.send ( 200, "text/html",html);
+}
 String Title(){
   String html = "<html>\
   <head>\
@@ -279,9 +275,8 @@ String Title(){
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
   <title>Config</title>\
   <style>\
-    * {margin:0;padding:0}\
-    body {width: 100%; height: auto;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
-    form {font-size: 12px;}\
+    * {margin:0;padding:0; box-sizing: border-box;}\
+    body {font-size: 12px;width: 100%; height: auto;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
     .head1{ display: flex; height: 50px;border-bottom: red 3px solid;}\
     .head1 h1{margin: auto;}\
     table, th, td { border: 1px solid black;border-collapse: collapse;}\
@@ -292,7 +287,7 @@ String Title(){
     button:hover {background: #ccc; font-weight: bold; cursor: pointer;}\
     .subtitle {text-align: left;font-weight: bold;}\
     .content {padding: 10px 20px;}\
-    .left , .right { width: 50%; float: left;text-align: left;line-height: 25px;padding: 5px 0; vertical-align: top;}\
+    .left , .right { width: 50%; float: left;text-align: left;line-height: 25px;padding: 5px; vertical-align: top;}\
     .left {text-align: right}\
     .listBtn {width: 100%; display: inline-block; text-align: center}\
     a {text-decoration: none;}\
@@ -307,9 +302,14 @@ String Title(){
     .important {color: red;}\
     .row-block {display: inline-block; width: 100%;}\
     @media only screen and (min-width: 768px) {\
-      body {width: 600px;}\
-      form {font-size: 18px;}\
+      body {width: 600px;font-size: 16;}\
+      .item-message {width: 50% !important; padding: 10px !important;}\
       }\
+    textarea {padding: 5px 10px;width: 90%;}\
+    .label { vertical-align: top;}\
+    .item-message {width: 100%; display: inline-block; padding: 5px;}\
+    .status-message {display: inline-block; vertical-align: top;}\
+    .title-message {display: inline-block; line-height: 24px; font-weight: bold;}\
   </style>\
   </head>";
   return html;
@@ -342,7 +342,7 @@ String ContentLogin(){
         <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Tài khoản</div>\
         <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" name=\"txtNameAP\" value=\""+apSSID+"\" required></div></div>\
         <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
-        <div class=\"right\">: <input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassPortTCP\" value=\"\" required></div></div>\
+        <div class=\"right\">: <input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassPortTCP\" value=\"\"></div></div>\
         <div class=\"listBtn\">\
         <a href=\"/home\" target=\"_blank\">Trang chủ!</a>\
       <button type=\"submit\">Đăng nhập</button></div>\
@@ -364,6 +364,11 @@ String ContentConfig(){
         <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" required></div></div>\
         <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
         <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtAPPass\" value=\""+apPASS+"\"></div></div>\
+        <div class=\"subtitle\">Tài khoản đăng nhập</div>\
+        <div class=\"row-block\"><div class=\"left\">Tên tài khoản</div>\
+        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" disabled required></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
+        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
         <hr>\
         <div class=\"listBtn\">\
           <button type=\"submit\"><a href=\"?txtRefresh=true\">Làm mới</a></button>\
@@ -379,16 +384,35 @@ String ContentConfig(){
   </html>";
   return content;
 }
-
-String ChannelRFConfig(){
+bool isStatus = true;
+String configMessage(){
   GiaTriThamSo();
+
   String content = "<body>\
     <div class=\"head1\">\
-    <h1>Cài đặt RF</h1>\
+    <h1>Cài đặt thông điệp</h1>\
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
-        <table><tr class=\"row\"><th>Vị trí</th><th>Tên hiển thị</th></tr>"+ SendTRRFConfig() +"</table>\
+        <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
+        <div class=\"right\"><input type=\"radio\" name=\"chboxStatus\" " + String(isStatus ?  "checked" : "") + "><span class=\"label\">Có</span>\
+        <input type=\"radio\" name=\"chboxStatus\" " + String(!isStatus ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
+        <div class=\"right\"><textarea rows='2' placeholder='Message'></textarea></div>\
+        <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
+        <div class=\"right\">" + dropdownFonts() + "</div>\
+        <div class=\"row-block\"><div class=\"left\">Cường độ sáng :</div>\
+        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" min=\"1\" max=\"100\" value=\"50\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        <div class=\"row-block\"><div class=\"left\">Chuyển động :</div>\
+        <div class=\"right\">\
+        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Không</span><br/>\
+        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Trái qua phải</span><br/>\
+        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Phải qua trái</span><br/>\
+        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Trên xuống dưới</span><br/>\
+        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Dưới lên trên</span><br/>\
+        </div>\
+        <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động (Nếu có) :</div>\
+        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"100\" name=\"quantity\" min=\"100\" max=\"2000\" oninput=\"if(value.length>4)value=2000;if(value.length == 0)value=100\"></div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
           <button type=\"submit\"><a href=\"/rfconfig?\">Làm mới</a></button>\
@@ -397,45 +421,77 @@ String ChannelRFConfig(){
           <button type=\"submit\"><a href=\"/?txtBack=true\">Trang trước</a></button>\
         </div>\
       </form>\
+      <script type=\"text/javascript\">\
+        var slider = document.getElementById(\"rangeLight\");\
+        var output = document.getElementById(\"txtRangeLight\");\
+        output.innerHTML = slider.value;\
+        slider.oninput = function() {\
+          output.innerHTML = this.value;\
+        }\
+      </script>\
     </div>\
   </body>\
   </html>";
   return content;
 }
-/*
-String webView(){
+String listMessage(){
+  GiaTriThamSo();
   String content = "<body>\
     <div class=\"head1\">\
-    <h1>Trang chủ</h1>\
+    <h1>Danh sách thông điệp</h1>\
     </div>\
-    <div class=\"card-rf " + isTrActive(0) + "\">"+ getData(bufferRF[0]) +"</div>\
     <div class=\"content\">\
-    <form action=\"\" method=\"get\">\
-      <table>\
-      <tr class=\"row\"><th>Vị trí</th><th>Tên gọi</th></tr>"+ SendTRViewHome() +"\
-      </table>\
-      <br><hr>\
-      <div class=\"listBtn\">\
-      <button type=\"submit\"><a href=\"/\">Đăng nhập</a></button>\
-      </div>\
-    </form>\
-    <script type=\"text/javascript\">\
-      setInterval(function() {\
-      window.location.reload();\
-      }, 2000);\
-    </script>\
+      <form action=\"\" method=\"get\">\
+        " + SendListMessage() + "\
+        <br><hr>\
+        <div class=\"listBtn\">\
+          <button type=\"submit\"><a href=\"/rfconfig?\">Làm mới</a></button>\
+          <button type=\"submit\">Lưu lại</button>\
+          <button type=\"submit\"><a href=\"/?txtLogout=true\">Đăng xuất</a></button>\
+          <button type=\"submit\"><a href=\"/?txtBack=true\">Trang trước</a></button>\
+        </div>\
+      </form>\
+       <style type=\"text/css\">\
+        input[type=checkbox]{height: 0;width: 0;visibility: hidden;}\
+        label {	cursor: pointer;	text-indent: -9999px;	width: 50px;	height: 24px;	background: grey;	display: block;	border-radius: 22px;	position: relative;}\
+        label:after {	content: '';	position: absolute;	top: 2px;	left: 2px;	width: 20px;	height: 20px;	background: #fff;	border-radius: 20px;	transition: 0.3s;}\
+        input:checked + label {	background: #4cda64;}\
+        input:checked + label:after {left: calc(100% - 2px);transform:translateX(-100%);}\
+      </style>\
+      <script type=\"text/javascript\">\
+        var slider = document.getElementById(\"rangeLight\");\
+        var output = document.getElementById(\"txtRangeLight\");\
+        output.innerHTML = slider.value;\
+        slider.oninput = function() {\
+          output.innerHTML = this.value;\
+        }\
+      </script>\
     </div>\
   </body>\
   </html>";
   return content;
-}*/
-String SendTRRFConfig()
+}
+String dropdownFonts() {
+  String modelsInventer[4] = {"Font 1", "Font 2", "Font 3", "Font 4"};
+  String selectedInventer = modelsInventer[1];
+  String s ="";
+  s += "<select class=\"input\" name=\"txtSelectedInventer\">";
+  for (int i = 0; i< 4; i++) {
+    s += "<option value=\"" + modelsInventer[i] + "\" " + ((selectedInventer == modelsInventer[i]) ? "selected" : "") + ">" + (modelsInventer[i]) + "</option>";
+  }
+  s += "</select>";
+  return s;
+}
+String SendListMessage()
 {
   String s="";
-  // for (int i=0; i< (isButtonHandle ? RFCHANNEL - 1: RFCHANNEL) ;i++) {
-  //   String id = (i < 10 ? "0" + String(i) : String(i));
-  //   s += "<tr class=\"row\"><td class=\"column\">"+ id +"</td><td class=\"column\"><input type=\"text\" class=\"input noboder\" maxlength=\"6\" placeholder=\"Tên bàn\" name=\"txtChannelRF"+id+"\" value=\""+ channelRF[i] +"\" required></td></tr>";
-  // }
+  for (int i = 0; i < 4 ;i++ ) {
+    String id = String(i);
+    s += "<div class=\"item-message\">\
+    <div class=\"status-message\"><input type=\"checkbox\" id=\"switch" + id + "\" /><label for=\"switch" + id + "\"></label></div>\
+    <div class=\"title-message\">Day la noi dung hien thi</div>\
+    </div>";
+  }
   //show(s);
   return s;
 }
@@ -477,8 +533,13 @@ void GiaTriThamSo()
           } else {
             show("txtAPPass is invalid (Value.length() >= 8 && Value != apPASS)");
           }
-          
         } 
+      }
+      else if (Name.indexOf("txtPassLogin") >= 0){
+        if (Value != passLogin){
+          passLogin = Value;
+          show("Set passLogin : " + Value);
+        }
       }
       else if (Name.indexOf("txtRestart") >= 0){
         idWebSite = 2;
@@ -505,7 +566,7 @@ void GiaTriThamSo()
       else if (Name.indexOf("txtPassPortTCP") >= 0)
         PassWord =  Value ;
 
-      if (UserName.equals(apSSID) && PassWord.equals(String(apSSID))){
+      if (UserName.equals(apSSID) && PassWord.equals(String(passLogin))){
         isLogin = true;
         idWebSite = 1;
         show("Login == true");

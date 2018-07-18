@@ -1,5 +1,8 @@
 #include "Arduino.h"
 #include <EEPROM.h>
+void BeginEEPROM() {
+  EEPROM.begin(512);
+}
 void ClearEEPROM()
 {
   // write a 255 to all 512 bytes of the EEPROM
