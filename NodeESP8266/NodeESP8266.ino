@@ -22,6 +22,7 @@
 #include <WiFiServer.h>
 #include <WiFiUdp.h>
 #include "eeprom.h"
+#include <ArduinoJson.h>
 
 
 ESP8266WebServer server(80);
@@ -58,6 +59,9 @@ int idWebSite = 0;
 long timeLogout = 120000;
 long t = 0;
 
+StaticJsonBuffer<300> JSONBuffer; //Memory pool
+JsonObject& parsed = JSONBuffer.createObject();
+
 void setup()
 {
   delay(500);
@@ -83,6 +87,9 @@ void setup()
   AccessPoint();
   StartServer();
   show("End Setup()");
+  String JSONMessage = "{'arr': [{id: 1, name: 'nguyen', status: true},{id: 2, name: 'Quan', status: false}]}";
+  initialJson(JSONMessage);
+  show("arr size:" + String(parsed["arr"].size()));
 }
 
 void loop()
@@ -166,6 +173,14 @@ int ListenIdRF()
   return Di;
 }
 
+void initialJson(String strJson) {
+  JsonObject& parsed1 = JSONBuffer.parseObject(strJson);   //Parse message
+  if (!parsed1.success()) {      //Check for errors in parsing
+    show("Parsing failed");
+  }
+  parsed["arr"] = parsed1["arr"];
+}
+
 void ConfigDefault()
 {
   isLogin = false;
@@ -229,33 +244,38 @@ void ConnectWifi(String ssid, String password, long timeOut)
 
 void StartServer()
 {
-  server.on("/config", webConfig);
-  server.on("/home", webViewHome);
-  server.on("/message", webConfigMessage);
-  server.on("/", webListMessage);
+  server.on("/", login);
+  server.on("/setting", websetting);
+  server.on("/editMessage", webConfigMessage);
+  server.on("/listMessage", webListMessage);
+  server.on("/restart", restartDevice);
   server.onNotFound(handleNotFound);
   server.begin();
   show("HTTP server started");
 }
 
-void webConfig() {
+void login() {
   GiaTriThamSo();
   String html = Title();
-  if (idWebSite == 0) {
+  if (isLogin == false) {
     html += ContentLogin();
   }
-  else if (idWebSite == 1) {
-    html += ContentConfig();
+  else {
+    html += contentListMessage();
   }
-  else if (idWebSite == 2) {
-    html += ContentVerifyRestart();
-  }else html += ContentLogin();
+  // else if (idWebSite == 2) {
+  //   html += ContentVerifyRestart();
+  // }else html += ContentLogin();
   server.send ( 200, "text/html",html);
 }
 
-void webViewHome() {
+void websetting() {
   String html = Title();
-  // html += webView();
+  if (isLogin == false) {
+    html += ContentLogin();
+  } else {
+    html += ContentConfig();
+  }
   server.send ( 200, "text/html",html);
 }
 void webConfigMessage() {
@@ -265,7 +285,20 @@ void webConfigMessage() {
 }
 void webListMessage() {
   String html = Title();
-  html += listMessage();
+  if (isLogin == false) {
+    html += ContentLogin();
+  } else {
+    html += contentListMessage();
+  }
+  server.send ( 200, "text/html",html);
+}
+void restartDevice() {
+  String html = Title();
+  if (isLogin == false) {
+    html += ContentLogin();
+  } else {
+    html += ContentVerifyRestart();
+  }
   server.send ( 200, "text/html",html);
 }
 String Title(){
@@ -309,8 +342,14 @@ String Title(){
     .label { vertical-align: top;}\
     .item-message {width: 100%; display: inline-block; padding: 5px;}\
     .status-message {display: inline-block; vertical-align: top;}\
-    .title-message {display: inline-block; line-height: 24px; font-weight: bold;}\
+    .title-message {display: inline-block; line-height: 24px; font-weight: bold; cursor: pointer;}\
   </style>\
+  <script>\
+    function goState(url) {\
+      console.log(url);\
+      window.location.href = url;\
+    };\
+  </script>\
   </head>";
   return html;
 }
@@ -323,8 +362,8 @@ String ContentVerifyRestart() {
       <form action=\"\" method=\"get\">\
       <div class=\"subtitle\">Bạn có muốn khởi động lại thiết bị?</div>\
       <div class=\"listBtn\">\
-        <button type=\"submit\" name=\"txtVerifyRestart\" value=\"false\">Không</button>\
-        <button type=\"submit\" name=\"txtVerifyRestart\" value=\"true\">Đồng ý</button>\
+        <button type=\"submit\" name=\"txtVerifyRestart\" value=\"false\">Đồng ý</button>\
+        <button type=\"button\" onclick=\"goState('/setting')\">Không</button>\
       <div>\
       </form>\
     </div>\
@@ -339,13 +378,14 @@ String ContentLogin(){
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
-        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Tài khoản</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" name=\"txtNameAP\" value=\""+apSSID+"\" required></div></div>\
-        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
-        <div class=\"right\">: <input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassPortTCP\" value=\"\"></div></div>\
+        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Tài khoản :</div>\
+        <div class=\"right\"><input class=\"input\" placeholder=\"Name wifi\" name=\"txtUsername\" value=\""+apSSID+"\" required></div></div>\
+        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Mật khẩu :</div>\
+        <div class=\"right\"><input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassword\"></div></div>\
         <div class=\"listBtn\">\
-        <a href=\"/home\" target=\"_blank\">Trang chủ!</a>\
-      <button type=\"submit\">Đăng nhập</button></div>\
+        <div class=\"left\"></div>\
+        <div class=\"right\"><button type=\"submit\">Đăng nhập</button></div>\
+        </div>\
       </form>\
     </div>\
   </body>\
@@ -371,13 +411,12 @@ String ContentConfig(){
         <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
         <hr>\
         <div class=\"listBtn\">\
-          <button type=\"submit\"><a href=\"?txtRefresh=true\">Làm mới</a></button>\
+          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
+          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
           <button type=\"submit\" name=\"btnSave\" value=\"true\">Lưu</button>\
-          <button type=\"submit\"><a href=\"/?txtRestart=true\">Khởi động</a></button>\
-          <button type=\"submit\"><a href=\"/?txtLogout=true\">Đăng xuất</a></button>\
+          <button type=\"button\" onclick=\"goState('/restart')\">Khởi động</button>\
         </div>\
         <hr>\
-        <a href=\"/rfconfig\">Mã hóa tên!</a>\
       </form>\
     </div>\
   </body>\
@@ -415,10 +454,9 @@ String configMessage(){
         <div class=\"right\"><input class=\"input\" type=\"number\" value=\"100\" name=\"quantity\" min=\"100\" max=\"2000\" oninput=\"if(value.length>4)value=2000;if(value.length == 0)value=100\"></div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
-          <button type=\"submit\"><a href=\"/rfconfig?\">Làm mới</a></button>\
-          <button type=\"submit\">Lưu lại</button>\
-          <button type=\"submit\"><a href=\"/?txtLogout=true\">Đăng xuất</a></button>\
-          <button type=\"submit\"><a href=\"/?txtBack=true\">Trang trước</a></button>\
+          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
+          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
+          <button type=\"submit\" >Lưu lại</button>\
         </div>\
       </form>\
       <script type=\"text/javascript\">\
@@ -434,7 +472,7 @@ String configMessage(){
   </html>";
   return content;
 }
-String listMessage(){
+String contentListMessage(){
   GiaTriThamSo();
   String content = "<body>\
     <div class=\"head1\">\
@@ -445,10 +483,10 @@ String listMessage(){
         " + SendListMessage() + "\
         <br><hr>\
         <div class=\"listBtn\">\
-          <button type=\"submit\"><a href=\"/rfconfig?\">Làm mới</a></button>\
-          <button type=\"submit\">Lưu lại</button>\
-          <button type=\"submit\"><a href=\"/?txtLogout=true\">Đăng xuất</a></button>\
-          <button type=\"submit\"><a href=\"/?txtBack=true\">Trang trước</a></button>\
+          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
+          <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt</button>\
+          <button type=\"button\" onclick=\"saveMessage()\">Lưu lại</button>\
+          <button type=\"submit\"><a href=\"/?txtAddMessage=true\">Thêm mới</a></button>\
         </div>\
       </form>\
        <style type=\"text/css\">\
@@ -459,12 +497,25 @@ String listMessage(){
         input:checked + label:after {left: calc(100% - 2px);transform:translateX(-100%);}\
       </style>\
       <script type=\"text/javascript\">\
-        var slider = document.getElementById(\"rangeLight\");\
-        var output = document.getElementById(\"txtRangeLight\");\
-        output.innerHTML = slider.value;\
-        slider.oninput = function() {\
-          output.innerHTML = this.value;\
-        }\
+        var configMessage = function(index) {\
+          var url = \"/editMessage?message=\" + index;\
+          window.location.href = url;\
+        };\
+        var saveMessage = function() {\
+          var listCheckbox= document.getElementsByTagName('input');\
+          var param = '/listMessage?';\
+          for(var i = 0; i < listCheckbox.length; i++) {\
+            if(listCheckbox[i].type=='checkbox') {\
+              if (listCheckbox[i].checked == true) {\
+                param += 'chboxStatus'+ i + '=true';\
+              } else param += 'chboxStatus'+ i + '=false';\
+              param += '&';\
+            }\
+          }\
+          param += 'btnSaveList=true';\
+          console.log(param);\
+          window.location.href = param;\
+        };\
       </script>\
     </div>\
   </body>\
@@ -485,11 +536,16 @@ String dropdownFonts() {
 String SendListMessage()
 {
   String s="";
-  for (int i = 0; i < 4 ;i++ ) {
+  int length = parsed["arr"].size();
+  for (int i = 0; i < length ;i++ ) {
     String id = String(i);
+    JsonObject& item = parsed["arr"][i];  //Implicit cast
+    const char * name = item["name"];
+    // Serial.println(status == true ? "true" : "false");
+    String status = (bool)item["status"] ==  true ? " checked " : "" ;
     s += "<div class=\"item-message\">\
-    <div class=\"status-message\"><input type=\"checkbox\" id=\"switch" + id + "\" /><label for=\"switch" + id + "\"></label></div>\
-    <div class=\"title-message\">Day la noi dung hien thi</div>\
+    <div class=\"status-message\"><input type=\"checkbox\" name=\"chboxStatus" + id + "\"" + status + "id=\"switch" + id + "\" /><label for=\"switch" + id + "\"></label></div>\
+    <div class=\"title-message\" onclick=\"configMessage(" + id +")\">" + name + "</div>\
     </div>";
   }
   //show(s);
@@ -510,7 +566,7 @@ void GiaTriThamSo()
     String Name=server.argName(i); 
     String Value=String( server.arg(i)) ;
     String s1=Name+ ": " +Value;
-    //show(s1);
+    show(s1);
     if (isLogin == true) {
       if (Name.indexOf("txtLogout") >= 0){
         isLogin = false;
@@ -556,22 +612,22 @@ void GiaTriThamSo()
         if ( Value.indexOf("true") >=0 ) {
           setup();
           show("Restart Device");
-          idWebSite = 0;
         }
-        else idWebSite = 1;
       }
     }else {
-      if (Name.indexOf("txtNameAP") >= 0)
+      if (Name.indexOf("txtUsername") >= 0) {
         UserName =  Value ;
-      else if (Name.indexOf("txtPassPortTCP") >= 0)
+        show("Set UserName : " + UserName);
+      }
+      else if (Name.indexOf("txtPassword") >= 0) {
         PassWord =  Value ;
+        show("Set Password : " + PassWord);
+      }
 
-      if (UserName.equals(apSSID) && PassWord.equals(String(passLogin))){
+      if (Name.indexOf("txtPassword") >= 0 && UserName.equals(apSSID) && PassWord.equals(passLogin)){
         isLogin = true;
-        idWebSite = 1;
         show("Login == true");
-      }else {
-        idWebSite = 0;
+      } else {
         isLogin = false;
       }
     }/*
