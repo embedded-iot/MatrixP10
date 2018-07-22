@@ -35,6 +35,7 @@ ESP8266WebServer server(80);
 #define ADDR_APSSID ADDR
 #define ADDR_APPASS (ADDR_APSSID+20)
 #define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
+#define ADDR_JSON_MESSAGE (ADDR_PASS_LOGIN + 20)
 
 #define NAME_DEFAULT "MBELL"
 #define PASS_DEFAULT "1234567890"
@@ -63,6 +64,8 @@ long t = 0;
 DynamicJsonBuffer JSONBuffer;
 JsonObject& parsed = JSONBuffer.createObject();
 // JsonArray& parsed["arr"] = JSONBuffer.createArray();
+#define MAX_LENGTH_JSON_MESSAGE (512 - ADDR_JSON_MESSAGE)
+String JSONMessage;
 int currentIndex = -1;
 
 #define FONT_SIZE 4
@@ -73,6 +76,7 @@ void setup()
   delay(500);
   Serial.begin(115200);
   Serial.println();
+  show("Start:" + String(ADDR_JSON_MESSAGE) + " Lenght:" + String(512 - ADDR_JSON_MESSAGE));
   BeginEEPROM();
   GPIO();
   idWebSite = 0;
@@ -94,10 +98,9 @@ void setup()
   StartServer();
   show("End Setup()");
  
-  String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
+  // String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
   // String JSONMessage = "[{'status':'true','name':'nguyen van quan','font':'Font 2','light':'40','motion':'left','baud':'400'}]";
   // char JSONMessage[] = "[{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"}]";
-  initialJson(JSONMessage);
   show("arr size:" + String(parsed["arr"].size()));
   String json1 = "";
   parsed["arr"].printTo(json1);
@@ -215,6 +218,8 @@ void ConfigDefault()
   apSSID = AP_SSID_DEFAULT;
   apPASS = AP_PASS_DEFAULT;
   passLogin =  PASS_LOGIN_DEFAULT;
+  parsed["arr"] = JSONBuffer.createArray();
+  // JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
   show("Config Default");
 }
 void WriteConfig()
@@ -222,6 +227,10 @@ void WriteConfig()
   SaveStringToEEPROM(apSSID, ADDR_APSSID);
   SaveStringToEEPROM(apPASS, ADDR_APPASS);
   SaveStringToEEPROM(passLogin, ADDR_PASS_LOGIN);
+  String JSONMessage = "";
+  parsed.printTo(JSONMessage);
+  SaveStringToEEPROM(JSONMessage, ADDR_JSON_MESSAGE);
+
   show("Write Config");
 }
 void ReadConfig()
@@ -229,9 +238,12 @@ void ReadConfig()
   apSSID = ReadStringFromEEPROM(ADDR_APSSID);
   apPASS = ReadStringFromEEPROM(ADDR_APPASS);
   passLogin = ReadStringFromEEPROM(ADDR_PASS_LOGIN);
+  String JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
   show("Read Config");
   show("Access Point: \n" + apSSID + "\n" + apPASS);
   show("Pass login: \n" + passLogin);
+  show("Json Message: \n" + String(JSONMessage.length()));
+  initialJson(JSONMessage);
 }
 
 void AccessPoint()
@@ -617,13 +629,13 @@ String SendListMessage()
   String s="";
   String json1 = "";
   int length = parsed["arr"].size();
-  for (int i = 0; i < length; i++) {
-    JsonObject& itemOb = parsed["arr"][i];
-    json1 = "";
-    itemOb.printTo(json1);
-    show(json1);
-  }
-  // return "";
+  show("SendListMessage length:" + String(length));
+  // for (int i = 0; i < length; i++) {
+  //   JsonObject& itemOb = parsed["arr"][i];
+  //   json1 = "";
+  //   itemOb.printTo(json1);
+  //   show(json1);
+  // }
   for (int i = 0; i < length ;i++ ) {
     String id = String(i);
     JsonObject& item = parsed["arr"][i];  //Implicit cast
@@ -764,9 +776,9 @@ void GiaTriThamSo()
       else if (Name.indexOf("btnSaveMessage") >= 0){
         if ( Value.indexOf("true") >= 0 ) {
           show("Set btnSaveMessage : " + Value);
-          String strJson;
-          object.printTo(strJson);
-          show(strJson); 
+          String strJson = "";
+          // object.printTo(strJson);
+          // show(strJson); 
           JsonArray& array1 = parsed["arr"];
           if (isEdit) { 
             JsonObject& object1 = parsed["arr"][currentIndex];
@@ -776,11 +788,20 @@ void GiaTriThamSo()
             array1.add(object);
             show("Add message");
           }
-          
+          parsed.printTo(strJson);
+          show(strJson); 
+          if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
+            array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
+            show("Out EEPROM");
+          } else {
+            WriteConfig();
+            // ReadConfig();
+          }
+
         }
       }
       
-    }else {
+    } else {
       if (Name.indexOf("txtUsername") >= 0) {
         UserName =  Value ;
         show("Set UserName : " + UserName);
@@ -796,20 +817,7 @@ void GiaTriThamSo()
       } else {
         isLogin = false;
       }
-    }/*
-    if (Name.indexOf("txtChannelRF") >=0){
-      int i1 = Name.indexOf("RF");
-      if (i1 > 0){
-        String strId = Name.substring(i1 + 2,i1 + 4);
-        int id = strId.toInt();
-        if (Value != channelRF[id]) {
-          channelRF[id] = Value;
-          WriteConfig();
-          show("Save config");
-        }
-      }
     }
-    */
     Name = "";
     Value = "";
   }
