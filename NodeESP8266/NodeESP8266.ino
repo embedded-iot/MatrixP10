@@ -59,8 +59,14 @@ int idWebSite = 0;
 long timeLogout = 120000;
 long t = 0;
 
-StaticJsonBuffer<300> JSONBuffer; //Memory pool
+// StaticJsonBuffer<512> JSONBuffer; //Memory pool
+DynamicJsonBuffer JSONBuffer;
 JsonObject& parsed = JSONBuffer.createObject();
+// JsonArray& parsed["arr"] = JSONBuffer.createArray();
+int currentIndex = -1;
+
+#define FONT_SIZE 4
+String Fonts[FONT_SIZE] = {"Font 1", "Font 2", "Font 3", "Font 4"};
 
 void setup()
 {
@@ -87,9 +93,15 @@ void setup()
   AccessPoint();
   StartServer();
   show("End Setup()");
-  String JSONMessage = "{'arr': [{id: 1, name: 'nguyen', status: true},{id: 2, name: 'Quan', status: false}]}";
+ 
+  String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
+  // String JSONMessage = "[{'status':'true','name':'nguyen van quan','font':'Font 2','light':'40','motion':'left','baud':'400'}]";
+  // char JSONMessage[] = "[{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"}]";
   initialJson(JSONMessage);
   show("arr size:" + String(parsed["arr"].size()));
+  String json1 = "";
+  parsed["arr"].printTo(json1);
+  show(json1);
 }
 
 void loop()
@@ -174,13 +186,29 @@ int ListenIdRF()
 }
 
 void initialJson(String strJson) {
+  show("initialJson :");
+  // show(strJson);
+  JSONBuffer.clear();
   JsonObject& parsed1 = JSONBuffer.parseObject(strJson);   //Parse message
   if (!parsed1.success()) {      //Check for errors in parsing
     show("Parsing failed");
   }
   parsed["arr"] = parsed1["arr"];
 }
-
+void DeleteMessage(int index) {
+  JsonArray& array1 = parsed["arr"];
+  show("Delete item: " + String(index));
+  if (index >= 0) {
+    array1.remove(index);
+    show("True!");
+    return;
+  }
+  show("False!");
+}
+void UpdateMessage(int index, String field, String value) {
+  JsonObject &object = parsed["arr"][index];
+  object[field] = value;
+}
 void ConfigDefault()
 {
   isLogin = false;
@@ -246,9 +274,10 @@ void StartServer()
 {
   server.on("/", login);
   server.on("/setting", websetting);
-  server.on("/editMessage", webConfigMessage);
+  server.on("/settingMessage", webConfigMessage);
   server.on("/listMessage", webListMessage);
   server.on("/restart", restartDevice);
+  server.on("/verifyDelete", verifyDeleteMessage);
   server.onNotFound(handleNotFound);
   server.begin();
   show("HTTP server started");
@@ -279,8 +308,13 @@ void websetting() {
   server.send ( 200, "text/html",html);
 }
 void webConfigMessage() {
+
   String html = Title();
-  html += configMessage();
+  if (isLogin == false) {
+    html += ContentLogin();
+  } else {
+    html += configMessage();
+  }
   server.send ( 200, "text/html",html);
 }
 void webListMessage() {
@@ -298,6 +332,15 @@ void restartDevice() {
     html += ContentLogin();
   } else {
     html += ContentVerifyRestart();
+  }
+  server.send ( 200, "text/html",html);
+}
+void verifyDeleteMessage() {
+  String html = Title();
+  if (isLogin == false) {
+    html += ContentLogin();
+  } else {
+    html += ContentVerifyDelete();
   }
   server.send ( 200, "text/html",html);
 }
@@ -362,8 +405,26 @@ String ContentVerifyRestart() {
       <form action=\"\" method=\"get\">\
       <div class=\"subtitle\">Bạn có muốn khởi động lại thiết bị?</div>\
       <div class=\"listBtn\">\
-        <button type=\"submit\" name=\"txtVerifyRestart\" value=\"false\">Đồng ý</button>\
+        <button type=\"button\" onclick=\"goState('/?txtVerifyRestart = true')\" >Đồng ý</button>\
         <button type=\"button\" onclick=\"goState('/setting')\">Không</button>\
+      <div>\
+      </form>\
+    </div>\
+  </body>\
+  </html>";
+  return content;
+}
+String ContentVerifyDelete() {
+  String content = "<body>\
+    <div class=\"head1\">\
+      <h1>Xác thực</h1>\
+    </div>\
+    <div class=\"content\">\
+      <form action=\"\" method=\"get\">\
+      <div class=\"subtitle\">Bạn có muốn xóa thông điệp \"" + String(currentIndex) + "\" hay không?</div>\
+      <div class=\"listBtn\">\
+        <button type=\"button\" onclick=\"goState('/listMessage?txtVerifyDelete=true')\" >Đồng ý</button>\
+        <button type=\"button\" onclick=\"goState('/settingMessage?txtIndexMessage =" + String(currentIndex) + "')\">Không</button>\
       <div>\
       </form>\
     </div>\
@@ -387,6 +448,11 @@ String ContentLogin(){
         <div class=\"right\"><button type=\"submit\">Đăng nhập</button></div>\
         </div>\
       </form>\
+      <script>\
+        if (window.location.pathname != '/') {\
+          goState('/');\
+        }\
+      </script>\
     </div>\
   </body>\
   </html>";
@@ -412,20 +478,34 @@ String ContentConfig(){
         <hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
-          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
-          <button type=\"submit\" name=\"btnSave\" value=\"true\">Lưu</button>\
+          <button type=\"submit\" name=\"btnSaveSetting\" value=\"true\">Lưu</button>\
           <button type=\"button\" onclick=\"goState('/restart')\">Khởi động</button>\
         </div>\
-        <hr>\
       </form>\
     </div>\
   </body>\
   </html>";
   return content;
 }
-bool isStatus = true;
 String configMessage(){
   GiaTriThamSo();
+  int lengthMessage = parsed["arr"].size();
+  bool isEdit = currentIndex < lengthMessage;
+  const char * name = "Noi dung moi";
+  const char * font = Fonts[0].c_str();
+  bool status = false;
+  int light = 100;
+  const char * motion = "stop";
+  long baud = 100;
+  if (isEdit) {
+    JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
+    name = item["name"];
+    status = (bool)item["status"] == true ? true : false;
+    font = item["font"];
+    light = item["light"];
+    motion = item["motion"];
+    baud = item["baud"];
+  }
 
   String content = "<body>\
     <div class=\"head1\">\
@@ -433,30 +513,32 @@ String configMessage(){
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
+        <div class=\"row-block\"><div class=\"left\">Thông điệp số :</div>\
+        <div class=\"right\">" + String(currentIndex) +"</div></div>\
         <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
-        <div class=\"right\"><input type=\"radio\" name=\"chboxStatus\" " + String(isStatus ?  "checked" : "") + "><span class=\"label\">Có</span>\
-        <input type=\"radio\" name=\"chboxStatus\" " + String(!isStatus ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
+        <div class=\"right\"><input type=\"radio\" name=\"chboxStatusMessage\" value=\"true\" " + String(status ?  "checked" : "") + "><span class=\"label\">Có</span>\
+        <input type=\"radio\" name=\"chboxStatusMessage\" value=\"false\" " + String(!status ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
         <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
-        <div class=\"right\"><textarea rows='2' placeholder='Message'></textarea></div>\
+        <div class=\"right\"><textarea rows='2' name=\"txtNameMessage\" placeholder='Message' required>" + (strlen(name) > 0 ? name : "Noi dung moi") + "</textarea></div>\
         <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
-        <div class=\"right\">" + dropdownFonts() + "</div>\
+        <div class=\"right\">" + dropdownFonts(font) + "</div>\
         <div class=\"row-block\"><div class=\"left\">Cường độ sáng :</div>\
-        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" min=\"1\" max=\"100\" value=\"50\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"100\" value=\"" + String(light) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
         <div class=\"row-block\"><div class=\"left\">Chuyển động :</div>\
         <div class=\"right\">\
-        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Không</span><br/>\
-        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Trái qua phải</span><br/>\
-        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Phải qua trái</span><br/>\
-        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Trên xuống dưới</span><br/>\
-        <input type=\"radio\" name=\"chboxStatus\" checked><span class=\"label\">Dưới lên trên</span><br/>\
+        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"stop\" " + String(strcmp(motion,"stop") == 0 ?  "checked" : "") + "><span class=\"label\">Không</span><br/>\
+        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"left\" " + String(strcmp(motion,"left") == 0 ?  "checked" : "") + "><span class=\"label\">Trái qua phải</span><br/>\
+        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"right\" " + String(strcmp(motion,"right") == 0 ?  "checked" : "") + "><span class=\"label\">Phải qua trái</span><br/>\
+        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"top\" " + String(strcmp(motion,"top") == 0 ?  "checked" : "") + "><span class=\"label\">Trên xuống dưới</span><br/>\
+        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"bottom\" " + String(strcmp(motion,"bottom") == 0 ?  "checked" : "") + "><span class=\"label\">Dưới lên trên</span><br/>\
         </div>\
         <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động (Nếu có) :</div>\
-        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"100\" name=\"quantity\" min=\"100\" max=\"2000\" oninput=\"if(value.length>4)value=2000;if(value.length == 0)value=100\"></div></div>\
+        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"" + String(baud) + "\" name=\"txtBaudMessage\" min=\"100\" max=\"2000\" oninput=\"if(value.length>4)value=2000;if(value.length == 0)value=100\"></div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
-          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
-          <button type=\"submit\" >Lưu lại</button>\
+          <button type=\"submit\" name=\"btnSaveMessage\" value=\"true\">Lưu lại</button>\
+          <button " + (isEdit ? "" : "style='display:none;'") +" type=\"button\" onclick=\"goState('/verifyDelete?txtIndexMessage =" + String(currentIndex) + "')\">Xóa</button>\
         </div>\
       </form>\
       <script type=\"text/javascript\">\
@@ -483,10 +565,9 @@ String contentListMessage(){
         " + SendListMessage() + "\
         <br><hr>\
         <div class=\"listBtn\">\
-          <button type=\"button\" onclick=\"goState('/?txtLogout=true')\">Đăng xuất</button>\
           <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt</button>\
-          <button type=\"button\" onclick=\"saveMessage()\">Lưu lại</button>\
-          <button type=\"submit\"><a href=\"/?txtAddMessage=true\">Thêm mới</a></button>\
+          <button type=\"button\" " + (parsed["arr"].size() <= 0 ? "style='display:none;'" : " ") +" onclick=\"saveMessage()\">Lưu lại</button>\
+          <button type=\"button\" onclick=\"goState('/settingMessage?txtAddMessage=true')\">Thêm mới</button>\
         </div>\
       </form>\
        <style type=\"text/css\">\
@@ -498,7 +579,7 @@ String contentListMessage(){
       </style>\
       <script type=\"text/javascript\">\
         var configMessage = function(index) {\
-          var url = \"/editMessage?message=\" + index;\
+          var url = \"/settingMessage?txtIndexMessage=\" + index;\
           window.location.href = url;\
         };\
         var saveMessage = function() {\
@@ -522,13 +603,11 @@ String contentListMessage(){
   </html>";
   return content;
 }
-String dropdownFonts() {
-  String modelsInventer[4] = {"Font 1", "Font 2", "Font 3", "Font 4"};
-  String selectedInventer = modelsInventer[1];
+String dropdownFonts(String font) {
   String s ="";
-  s += "<select class=\"input\" name=\"txtSelectedInventer\">";
+  s += "<select class=\"input\" name=\"txtFontMessage\">";
   for (int i = 0; i< 4; i++) {
-    s += "<option value=\"" + modelsInventer[i] + "\" " + ((selectedInventer == modelsInventer[i]) ? "selected" : "") + ">" + (modelsInventer[i]) + "</option>";
+    s += "<option value=\"" + Fonts[i] + "\" " + ((font == Fonts[i]) ? "selected" : "") + ">" + (Fonts[i]) + "</option>";
   }
   s += "</select>";
   return s;
@@ -536,7 +615,15 @@ String dropdownFonts() {
 String SendListMessage()
 {
   String s="";
+  String json1 = "";
   int length = parsed["arr"].size();
+  for (int i = 0; i < length; i++) {
+    JsonObject& itemOb = parsed["arr"][i];
+    json1 = "";
+    itemOb.printTo(json1);
+    show(json1);
+  }
+  // return "";
   for (int i = 0; i < length ;i++ ) {
     String id = String(i);
     JsonObject& item = parsed["arr"][i];  //Implicit cast
@@ -561,12 +648,17 @@ void GiaTriThamSo()
   message += server.args();
   message += "\n";
   String UserName, PassWord;
+
+  int lengthMessage = parsed["arr"].size();
+  bool isEdit = currentIndex < lengthMessage;
+  JsonObject &object = JSONBuffer.createObject();
+
   for (uint8_t i=0; i<server.args(); i++){
      
     String Name=server.argName(i); 
     String Value=String( server.arg(i)) ;
     String s1=Name+ ": " +Value;
-    show(s1);
+    // show(s1);
     if (isLogin == true) {
       if (Name.indexOf("txtLogout") >= 0){
         isLogin = false;
@@ -602,18 +694,92 @@ void GiaTriThamSo()
         show("Verify restart");
         show(Value);
       }
-      else if (Name.indexOf("btnSave") >= 0)
+      else if (Name.indexOf("btnSaveSetting") >= 0)
       {
         WriteConfig();
         show("Save config");
       }
       else if (Name.indexOf("txtVerifyRestart") >= 0)
       {
-        if ( Value.indexOf("true") >=0 ) {
-          setup();
+        if ( Value.indexOf("true") >= 0 ) {
+          show("txtVerifyRestart:" + Value);
           show("Restart Device");
+          setup();
         }
       }
+      else if (Name.indexOf("txtIndexMessage") >= 0)
+      {
+        currentIndex = Value.toInt();
+        show("txtIndexMessage: " + String(currentIndex));
+      }
+      else if (Name.indexOf("txtAddMessage") >= 0)
+      {
+        if ( Value.indexOf("true") >= 0 ) {
+          int length = parsed["arr"].size();
+          currentIndex = length;
+          show("txtAddMessage: " + Value);
+        }
+      }
+      else if (Name.indexOf("txtVerifyDelete") >= 0)
+      {
+        if ( Value.indexOf("true") >= 0 ) {
+          show("txtVerifyDelete: " + Value);
+          DeleteMessage(currentIndex);
+        }
+      }
+      else if (Name.indexOf("chboxStatus") >= 0 && Name.length() <= 12)
+      { 
+        String index = Name.substring(Name.length() - 1, Name.length());
+        show("Set " + Name + " :" + Value);
+        if ( Value.indexOf("true") >= 0 ) {
+          UpdateMessage(index.toInt(), "status", "true");
+        } else  {
+          UpdateMessage(index.toInt(), "status", "false");
+        }
+      }
+      else if (Name.indexOf("chboxStatusMessage") >= 0){
+        object["status"] = ( Value.equals("true") ? true : false);
+        show("Set chboxStatusMessage : " + Value);
+      }
+      else if (Name.indexOf("txtNameMessage") >= 0){
+        object["name"] = Value;
+        show("Set txtNameMessage : " + Value);
+      }
+      else if (Name.indexOf("txtFontMessage") >= 0){
+        object["font"] = Value;
+        show("Set txtFontMessage : " + Value);
+      }
+      else if (Name.indexOf("txtLightMessage") >= 0){
+        object["light"] = Value.toInt();
+        show("Set txtLightMessage : " + Value);
+      }
+      else if (Name.indexOf("chboxMotionMessage") >= 0){
+        object["motion"] = Value;
+        show("Set chboxMotionMessage : " + Value);
+      }
+      else if (Name.indexOf("txtBaudMessage") >= 0){
+        object["baud"] = Value.toInt();
+        show("Set txtBaudMessage : " + Value);
+      }
+      else if (Name.indexOf("btnSaveMessage") >= 0){
+        if ( Value.indexOf("true") >= 0 ) {
+          show("Set btnSaveMessage : " + Value);
+          String strJson;
+          object.printTo(strJson);
+          show(strJson); 
+          JsonArray& array1 = parsed["arr"];
+          if (isEdit) { 
+            JsonObject& object1 = parsed["arr"][currentIndex];
+            array1[currentIndex] = object;
+            show("Edit message");
+          } else {
+            array1.add(object);
+            show("Add message");
+          }
+          
+        }
+      }
+      
     }else {
       if (Name.indexOf("txtUsername") >= 0) {
         UserName =  Value ;
