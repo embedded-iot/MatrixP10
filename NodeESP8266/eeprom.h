@@ -18,8 +18,19 @@ void ClearEEPROM()
  */
 void SaveStringToEEPROM(String data,int address)
 {
-  int len=data.length();
-  EEPROM.write(address,len); 
+  int len = data.length();
+  if (len >= 255) {
+    byte byte1 = 0xFF;
+    byte byte2 = len - byte1;
+    EEPROM.write(address, byte1);
+    address++;
+    EEPROM.write(address, byte2);
+    // Serial.println("Save Byte1 :" + String(byte1));
+    // Serial.println("Save Byte2 :" + String(byte2));
+  } else {
+    EEPROM.write(address, len);
+    // Serial.println("Save Byte1 :" + String(len));
+  } 
   for (int i=1;i<=len;i++)
     EEPROM.write(address+i,data.charAt(i-1));
   EEPROM.commit();
@@ -33,6 +44,12 @@ String ReadStringFromEEPROM(int address)
 {
   String s="";
   int len=(int)EEPROM.read(address);
+  if (len == 255) {
+    address = address + 1;
+    int byte2 = (int)EEPROM.read(address);
+    len = len + byte2;
+  }
+  // Serial.println("Read length :" + String(len));
   for (int i=1;i<=len;i++)
     s+=(char)EEPROM.read(address+i);
   return s;
