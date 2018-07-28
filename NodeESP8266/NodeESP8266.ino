@@ -24,6 +24,13 @@
 #include "eeprom.h"
 #include <ArduinoJson.h>
 
+#include <SPI.h>        //SPI.h must be included as DMD is written by SPI (the IDE complains otherwise)
+#include <DMD2.h>        //
+#include <fonts/Font_1.h>
+//Fire up the DMD library as dmd
+#define DISPLAYS_ACROSS 2
+#define DISPLAYS_DOWN 1
+SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire display
 
 ESP8266WebServer server(80);
 
@@ -58,7 +65,8 @@ String SoftIP, LocalIP;
 String passLogin;
 int idWebSite = 0;
 long timeLogout = 120000;
-long t = 0;
+long timeNextMessage = 60000;
+long t, tNext, tMotion;
 
 // StaticJsonBuffer<512> JSONBuffer; //Memory pool
 DynamicJsonBuffer JSONBuffer;
@@ -66,10 +74,16 @@ JsonObject& parsed = JSONBuffer.createObject();
 // JsonArray& parsed["arr"] = JSONBuffer.createArray();
 #define MAX_LENGTH_JSON_MESSAGE (512 - ADDR_JSON_MESSAGE)
 String JSONMessage;
-int currentIndex = -1;
+int currentIndex, showCurrentIndex;
 
-#define FONT_SIZE 4
-String Fonts[FONT_SIZE] = {"Font 1", "Font 2", "Font 3", "Font 4"};
+#define FONT_SIZE 1
+String Fonts[FONT_SIZE] = {"Font_1"};
+String startMsg = "I ready!";
+
+String currentMotion = "stop";
+long baudMotion;
+int showCurrentMessage = 0;
+int lengthMessageActive ;
 
 void setup()
 {
@@ -105,14 +119,33 @@ void setup()
   String json1 = "";
   parsed["arr"].printTo(json1);
   show(json1);
-}
 
+  dmd.setBrightness(1);
+  dmd.begin();
+  //  clear/init the DMD pixels held in RAM
+  dmd.clearScreen();   //true is normal (all pixels off), false is negative (all pixels on)
+  dmd.selectFont(Font_1);
+  char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
+  dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
+  refreshShowMessage();
+
+}
 void loop()
 {
   server.handleClient();
   if (millis() - t > timeLogout) {
     isLogin = false;
     t = millis();
+  }
+  if (millis() - tNext > timeNextMessage) {
+    showMatrix();
+    tNext = millis();
+  }
+  if (lengthMessageActive > 0 && !currentMotion.equals("stop")) {
+    if (millis() - tMotion > baudMotion) {
+      onMotion();
+      tMotion = millis();
+    }
   }
   if (digitalRead(RESET) == LOW)
   {
@@ -136,7 +169,75 @@ void show(String s)
     Serial.println(s);
   #endif
 }
-
+void onMotion() {
+  if (currentMotion.equals("left")) {
+    dmd.marqueeScrollX(1);
+  } else if (currentMotion.equals("right")) {
+    dmd.marqueeScrollX(-1);
+  } else if (currentMotion.equals("top")) {
+    dmd.marqueeScrollY(1);
+  } else if (currentMotion.equals("bottom")) {
+    dmd.marqueeScrollY(-1);
+  } else {
+    
+  }
+}
+void showMatrix() {
+  int lengthMessage = getLengthMessage();
+  if (lengthMessage > 0) {
+    JsonArray& arrayMessageActive = listMessageActiveStatus();
+    lengthMessageActive = arrayMessageActive.size(); 
+    show("MessageActiveStatus: " + String(lengthMessageActive));
+    if (lengthMessageActive > 0) {
+      String stg = "";
+      arrayMessageActive.printTo(stg);
+      show(stg);
+      stg = "";
+      show("Get showCurrentIndex : " + String(showCurrentIndex));
+      JsonObject& objectMessage = arrayMessageActive[showCurrentIndex];
+      show("objectMessage:");
+      (arrayMessageActive[showCurrentIndex]).printTo(stg);
+      show(stg);
+      showCurrentIndex++;
+      matrixSeting(objectMessage);
+      if (showCurrentIndex >= lengthMessageActive) {
+        showCurrentIndex = 0;
+      }
+    } else {
+      char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
+      dmd.drawString(0,0, nameMessage, GRAPHICS_ON);
+      
+    }
+  }
+}
+void refreshShowMessage() {
+  showCurrentIndex = 0;
+  tNext = millis();
+  showMatrix();
+}
+void matrixSeting(JsonObject& message) {
+  show("matrixSeting: ");
+  String strMessage = "";
+  message.printTo(strMessage);
+  show(strMessage);
+  String strName = message["name"];
+  if (strName.length() > 0) {
+    dmd.clearScreen();
+    String font = message["font"];
+    char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
+    dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
+    if (font.equals("Font_1")) {
+      dmd.selectFont(Font_1);
+    }
+    int light = message["light"];
+    dmd.setBrightness(light);
+    baudMotion = message["baud"];
+    String motion = message["motion"];
+    currentMotion = motion;
+  }
+  
+ 
+}
 char* string2char(String command){
   char *szBuffer = new char[command.length()+1];
      strcpy(szBuffer,command.c_str( ));
@@ -211,6 +312,35 @@ void DeleteMessage(int index) {
 void UpdateMessage(int index, String field, String value) {
   JsonObject &object = parsed["arr"][index];
   object[field] = value;
+}
+void UpdateMessage(int index, String field, bool value) {
+  JsonObject &object = parsed["arr"][index];
+  object[field] = value;
+}
+int getLengthMessage() {
+  return parsed["arr"].size();
+}
+JsonObject& getMessageByIndex(int index) {
+  JsonObject& tg = JSONBuffer.createObject();
+  if (index < getLengthMessage()) {
+    return parsed["arr"][index];
+  }
+  return tg;
+}
+JsonArray& listMessageActiveStatus() {
+  // JSONBuffer.clear();
+  // DynamicJsonBuffer JSONBuffer1;
+  // StaticJsonBuffer<1024> JSONBuffer1; 
+  JsonArray& tg = JSONBuffer.createArray();
+  int len = parsed["arr"].size();
+  for (int i = 0; i < len; i++) {
+    JsonObject& item = parsed["arr"][i];
+    bool status = item["status"];
+    if (!!status) {
+      tg.add(item);
+    }
+  }
+  return tg;
 }
 void ConfigDefault()
 {
@@ -506,9 +636,10 @@ String configMessage(){
   const char * name = "Noi dung moi";
   const char * font = Fonts[0].c_str();
   bool status = false;
-  int light = 100;
+  int light = 1;
   const char * motion = "stop";
-  long baud = 100;
+  long minBaud = 20, maxBaud = 5000;
+  long baud = minBaud;
   if (isEdit) {
     JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
     name = item["name"];
@@ -535,7 +666,7 @@ String configMessage(){
         <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
         <div class=\"right\">" + dropdownFonts(font) + "</div>\
         <div class=\"row-block\"><div class=\"left\">Cường độ sáng :</div>\
-        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"100\" value=\"" + String(light) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(light) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
         <div class=\"row-block\"><div class=\"left\">Chuyển động :</div>\
         <div class=\"right\">\
         <input type=\"radio\" name=\"chboxMotionMessage\" value=\"stop\" " + String(strcmp(motion,"stop") == 0 ?  "checked" : "") + "><span class=\"label\">Không</span><br/>\
@@ -545,7 +676,7 @@ String configMessage(){
         <input type=\"radio\" name=\"chboxMotionMessage\" value=\"bottom\" " + String(strcmp(motion,"bottom") == 0 ?  "checked" : "") + "><span class=\"label\">Dưới lên trên</span><br/>\
         </div>\
         <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động (Nếu có) :</div>\
-        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"" + String(baud) + "\" name=\"txtBaudMessage\" min=\"100\" max=\"2000\" oninput=\"if(value.length>4)value=2000;if(value.length == 0)value=100\"></div></div>\
+        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"" + String(baud) + "\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" oninput=\"if(value.length>4)value=" + String(maxBaud)+ ";if(value.length == 0)value=" + String(minBaud) + "\"></div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
@@ -744,9 +875,9 @@ void GiaTriThamSo()
         String index = Name.substring(Name.length() - 1, Name.length());
         show("Set " + Name + " :" + Value);
         if ( Value.indexOf("true") >= 0 ) {
-          UpdateMessage(index.toInt(), "status", "true");
+          UpdateMessage(index.toInt(), "status", true);
         } else  {
-          UpdateMessage(index.toInt(), "status", "false");
+          UpdateMessage(index.toInt(), "status", false);
         }
       }
       else if (Name.indexOf("chboxStatusMessage") >= 0){
@@ -797,7 +928,14 @@ void GiaTriThamSo()
             WriteConfig();
             // ReadConfig();
           }
-
+          refreshShowMessage();
+        }
+      }
+      else if (Name.indexOf("btnSaveList") >= 0){
+        if ( Value.indexOf("true") >= 0 ) {
+          show("Save List Message to EEPROM!");
+          WriteConfig();
+          refreshShowMessage();
         }
       }
       
