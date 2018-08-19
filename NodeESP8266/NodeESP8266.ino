@@ -21,6 +21,7 @@
 #include <ESP8266WebServer.h>
 #include <WiFiServer.h>
 #include <WiFiUdp.h>
+// #include <WiFi.h>
 #include "eeprom.h"
 #include <ArduinoJson.h>
 
@@ -47,7 +48,10 @@ ESP8266WebServer server(80);
 #define RESET 3 
 #define LED 2
 #define DEBUGGING true
-#define MODE_STATION false
+#define MODE_STATION true
+IPAddress staticIP(192, 168, 1, 100);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 #define ADDR 0
 #define ADDR_APSSID ADDR
@@ -135,6 +139,7 @@ void setup()
   ReadConfig();
   #if MODE_STATION 
     WiFi.mode(WIFI_AP_STA);
+    ConfigNetwork();
     ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000); 
     if (WiFi.status() != WL_CONNECTED) {
       WiFi.mode(WIFI_AP);
@@ -152,7 +157,7 @@ void setup()
   String json1 = "";
   parsed["arr"].printTo(json1);
   show(json1);
-  dmd.setBrightness(1);
+  dmd.setBrightness(lightMatrix);
   dmd.begin();
   //  clear/init the DMD pixels held in RAM
   dmd.clearScreen();   //true is normal (all pixels off), false is negative (all pixels on)
@@ -169,6 +174,7 @@ int listClient;
 int tWatchDog;
 void loop()
 { 
+  
   ESP.wdtFeed();
   if (millis() - tWatchDog > 1000) {
     watchdogCount = 0;
@@ -177,6 +183,11 @@ void loop()
   if (listClient > 0) {
     server.handleClient();
   }
+  #if MODE_STATION 
+    server.handleClient();
+    return;
+  #endif
+
   if (millis() - tCheckClient > 2000) {
     if (listClient != WiFi.softAPgetStationNum()) {
       listClient = WiFi.softAPgetStationNum();
@@ -444,7 +455,7 @@ void ReadConfig()
   show("Pass login: \n" + passLogin);
   show("Json Message: \n" + String(JSONMessage.length()));
   show("Time next message: \n" + String(timeNextMessage));
-  show("Light matrix:\n" + lightMatrix);
+  show("Light matrix:\n" + String(lightMatrix));
   initialJson(JSONMessage);
 }
 
@@ -483,7 +494,11 @@ void ConnectWifi(String ssid, String password, long timeOut)
     show("Disconnect");
   }
 }
-
+void ConfigNetwork(){
+ // Fire up wifi station
+  show("Station configuration ... ");
+  WiFi.config(staticIP, gateway, subnet);
+}
 void StartServer()
 {
   server.on("/", login);
@@ -574,7 +589,7 @@ String Title(){
   <title>Config</title>\
   <style>\
     * {margin:0;padding:0; box-sizing: border-box;}\
-    body {font-size: 12px;width: 100%; height: auto;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
+    body {font-size: 12px;width: 100%; height: 100%;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
     .head1{ display: flex; height: 50px;border-bottom: red 3px solid;}\
     .head1 h1{margin: auto;}\
     table, th, td { border: 1px solid black;border-collapse: collapse;}\
@@ -599,8 +614,12 @@ String Title(){
     .tr-active {background: #0095ff !important;}\
     .important {color: red;}\
     .row-block {display: inline-block; width: 100%;}\
+    .slider {width: 100%;}\
+    .slidecontainer {width: 90%;display: inline-block;vertical-align: top;}\
+    .hidden-block {display: none;}\    
+    .display-contents {display: contents;}\
     @media only screen and (min-width: 768px) {\
-      body {width: 600px;font-size: 16;}\
+      body {width: 600px;font-size: 16px;}\
       .item-message {width: 50% !important; padding: 10px !important;}\
       }\
     textarea {padding: 5px 10px;width: 90%;}\
@@ -684,7 +703,7 @@ String ContentConfig(){
   GiaTriThamSo();
   String content = "<body>\
     <div class=\"head1\">\
-      <h1>Cài đặt thiết bị</h1>\
+      <h1>Cài đặt chung</h1>\
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
@@ -699,14 +718,27 @@ String ContentConfig(){
         <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
         <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
         <div class=\"subtitle\">Cài đặt bảng LED</div>\
-        <div class=\"row-block\"><div class=\"left\">Thời gian chuyển nội dung tiếp theo:</div>\
-        <div class=\"right\"><input class=\"input\" type=\"number\" placeholder=\"Time next message\" maxlength=\"10\" min=\"1000\" name=\"txtTimeNextMsg\" value=\"" + timeNextMessage + "\"></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Số bảng chiều ngang</div>\
+        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_ACROSS + "\"></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Số bảng chiều dọc</div>\
+        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_DOWN + "\"></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Cường độ sáng</div>\
+        <div class=\"right\">: <div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(lightMatrix) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        </div>\
         <hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
-          <button type=\"submit\" name=\"btnSaveSetting\" value=\"true\">Lưu</button>\
-          <button type=\"button\" onclick=\"goState('/restart')\">Khởi động</button>\
+          <button type=\"submit\" name=\"btnSaveSetting\" value=\"true\">Lưu cài đặt</button>\
+          <button type=\"button\" onclick=\"goState('/restart')\">Khởi động lại</button>\
         </div>\
+        <script type=\"text/javascript\">\
+        var slider = document.getElementById(\"rangeLight\");\
+        var output = document.getElementById(\"txtRangeLight\");\
+        output.innerHTML = slider.value;\
+        slider.oninput = function() {\
+          output.innerHTML = this.value;\
+        };\
+      </script>\
       </form>\
     </div>\
   </body>\
@@ -736,11 +768,11 @@ String configMessage(){
 
   String content = "<body>\
     <div class=\"head1\">\
-    <h1>Cài đặt thông điệp</h1>\
+    <h1>" + String(isEdit ? "Cài đặt thông điệp" : "Thông điệp mới") +"</h1>\
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
-        <div class=\"row-block\"><div class=\"left\">Thông điệp số :</div>\
+        <div class=\"row-block hidden-block\"><div class=\"left\">Thông điệp số :</div>\
         <div class=\"right\">" + String(currentIndex) +"</div></div>\
         <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
         <div class=\"right\"><input type=\"radio\" name=\"chboxStatusMessage\" value=\"true\" " + String(status ?  "checked" : "") + "><span class=\"label\">Có</span>\
@@ -749,23 +781,17 @@ String configMessage(){
         <div class=\"right\"><textarea rows='2' name=\"txtNameMessage\" placeholder='Message' required>" + (strlen(name) > 0 ? name : "Noi dung moi") + "</textarea></div>\
         <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
         <div class=\"right\">" + dropdownFonts(font) + "</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Cường độ sáng :</div>\
-        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(light) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Chuyển động :</div>\
+        <div class=\"row-block\"><div class=\"left\">Hiệu ứng chuyển động :</div>\
         <div class=\"right\">" + dropdownMotions(motion) + "</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động (Nếu có) :</div>\
-        <div class=\"right\"><input class=\"input\" type=\"number\" value=\"" + String(baud) + "\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" oninput=\"if(value.length>4)value=" + String(maxBaud)+ ";if(value.length == 0)value=" + String(minBaud) + "\"></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Hiển thị theo trục X :</div>\
+        <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động :</div>\
+        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" value=\"" + String(baud) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        <div class=\"row-block\"><div class=\"left\">Tọa độ hiển thị :</div>\
         <div class=\"right\">\
-        <input type=\"number\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\" disabled>\
-        <button type=\"button\" onclick=\"btnXClickUpDown('txtXMessage', -1)\">-</button>\
-        <button type=\"button\" onclick=\"btnXClickUpDown('txtXMessage', 1)\">+</button>\
-        </div></div>\
-        <div class=\"row-block\"><div class=\"left\">Hiển thị theo trục X :</div>\
-        <div class=\"right\">\
-        <input type=\"number\" id=\"txtYMessage\" name=\"txtYMessage1\" value=\"0\" disabled>\
-        <button type=\"button\" onclick=\"btnXClickUpDown('txtYMessage', -1)\">-</button>\
-        <button type=\"button\" onclick=\"btnXClickUpDown('txtYMessage', 1)\">+</button>\
+        <div><input type=\"number\" class=\"display-contents\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\">\
+        <input type=\"number\" class=\"display-contents\" id=\"txtYMessage\" name=\"txtYMessage1\" value=\"0\"></div>\
+        <div class=\"row-arrow\"><div class=\"arrow arrow-top\" onclick=\"btnXClickUpDown('txtYMessage', -1)\"></div></div>\
+        <div class=\"row-arrow\"><div class=\"arrow arrow-left\" onclick=\"btnXClickUpDown('txtXMessage', -1)\"></div><div class=\"arrow arrow-right\" onclick=\"btnXClickUpDown('txtXMessage', 1)\"></div></div>\
+        <div class=\"row-arrow\"><div class=\"arrow arrow-bottom\" onclick=\"btnXClickUpDown('txtYMessage', 1)\"></div></div>\
         </div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
@@ -774,6 +800,19 @@ String configMessage(){
           <button " + (isEdit ? "" : "style='display:none;'") +" type=\"button\" onclick=\"goState('/verifyDelete?txtIndexMessage =" + String(currentIndex) + "')\">Xóa</button>\
         </div>\
       </form>\
+      <style type=\"text/css\">\
+      .row-arrow {text-align: center; width: 90%;}\
+      .arrow {display: inline-block; cursor: pointer;width:0px;height:0px;border-bottom:10px solid transparent;border-top:10px solid transparent;border-left:15px solid #2f2f2f;}\
+      .arrow:hover {border-left:15px solid red;}\
+      .arrow-top {transform: rotate(-90deg);}\
+      .arrow-left {margin-right: 32px;transform: rotate(-180deg);}\
+      .arrow-bottom {transform: rotate(90deg);}\
+      @media only screen and (min-width: 768px) {\
+        .arrow {display: inline-block; cursor: pointer;width:0px;height:0px;border-bottom:20px solid transparent;border-top:20px solid transparent;border-left:30px solid #2f2f2f;}\
+        .arrow:hover {border-left:30px solid red;}\
+        .arrow-left {margin-right: 54px;}\
+      }\
+      </style>\
       <script type=\"text/javascript\">\
         var slider = document.getElementById(\"rangeLight\");\
         var output = document.getElementById(\"txtRangeLight\");\
@@ -781,9 +820,9 @@ String configMessage(){
         slider.oninput = function() {\
           output.innerHTML = this.value;\
         };\
-        var btnXClickUpDown = function(id,count) {\
-          var x = document.getElementById(id).value;\
-          document.getElementById(id).value = parseInt(x) + count;\
+        function btnXClickUpDown(id,count) {\
+          document.getElementById(id).value = parseInt(document.getElementById(id).value) + count;\
+          console.log(document.getElementById(id).value);\
         };\
       </script>\
     </div>\
@@ -800,11 +839,12 @@ String contentListMessage(){
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
         " + SendListMessage() + "\
-        <br><hr>\
+        <br>\
+        <hr>\
         <div class=\"listBtn\">\
-          <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt</button>\
+          <button type=\"button\" onclick=\"goState('/settingMessage?txtAddMessage=true')\">Thêm thông điệp</button>\
           <button type=\"button\" " + (parsed["arr"].size() <= 0 ? "style='display:none;'" : " ") +" onclick=\"saveMessage()\">Lưu lại</button>\
-          <button type=\"button\" onclick=\"goState('/settingMessage?txtAddMessage=true')\">Thêm mới</button>\
+          <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt chung</button>\
         </div>\
       </form>\
        <style type=\"text/css\">\
@@ -1006,8 +1046,10 @@ void GiaTriThamSo()
         show("Set txtFontMessage : " + Value);
       }
       else if (Name.indexOf("txtLightMessage") >= 0){
-        object["light"] = Value.toInt();
-        show("Set txtLightMessage : " + Value);
+        if (Value.equals(String(lightMatrix)) == false) {
+          lightMatrix = Value.toInt();
+          show("Set lightMatrix : " + Value);
+        }
       }
       else if (Name.indexOf("chboxMotionMessage") >= 0){
         object["motion"] = Value;
