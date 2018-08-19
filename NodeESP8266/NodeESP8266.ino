@@ -1,7 +1,7 @@
 /***********************************************************************************
  *
  * GPIO PIN 
- * RESET 4  GPIO4
+ * RESET 3  GPIO4
  * LED   2  GPIO3
  * 
  * 
@@ -27,33 +27,50 @@
 #include <SPI.h>        //SPI.h must be included as DMD is written by SPI (the IDE complains otherwise)
 #include <DMD2.h>        //
 #include <fonts/Font_1.h>
+
+#include <Ticker.h>
+Ticker secondTick;
+
+
+// #define DEBUG_ESP_HTTP_SERVER
 //Fire up the DMD library as dmd
-#define DISPLAYS_ACROSS 2
+#define DISPLAYS_ACROSS 6
 #define DISPLAYS_DOWN 1
-SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire display
+//SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire displaySPIDMD
+//SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 16, 4, 12, 0);  // DMD controls the entire displaySPIDMD
+SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 16, 5, 12, 4);  // DMD controls the entire displaySPIDMD
 
 ESP8266WebServer server(80);
+// WiFiServer   ;
+
 
 #define RESET 3 
 #define LED 2
-#define DEBUGGING
+#define DEBUGGING true
+#define MODE_STATION false
 
 #define ADDR 0
 #define ADDR_APSSID ADDR
 #define ADDR_APPASS (ADDR_APSSID+20)
 #define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
 #define ADDR_JSON_MESSAGE (ADDR_PASS_LOGIN + 20)
+#define ADDR_TIME_NEXT_MSG 480 // 4 byte
+#define ADDR_LIGHT_MATRIX ADDR_TIME_NEXT_MSG + 4 // 1 byte
+
 
 #define NAME_DEFAULT "MBELL"
 #define PASS_DEFAULT "1234567890"
 #define STA_SSID_DEFAULT "TTQ"
 #define STA_PASS_DEFAULT "0987654321"
 #define AP_SSID_DEFAULT NAME_DEFAULT
-#define AP_PASS_DEFAULT PASS_DEFAULT
+#define AP_PASS_DEFAULT "1234567890"
 
 #define PASS_LOGIN_DEFAULT ""
 
 #define TIME_LIMIT_RESET 3000
+#define TIME_TIME_NEXT_MSG_DEFAULT 60000
+
+#define LIGHT_MATRIX_DEFAULT 255
 
 bool flagClear = false;
 bool isReconnectAP = false;
@@ -63,6 +80,7 @@ String staSSID, staPASS;
 String apSSID, apPASS;
 String SoftIP, LocalIP;
 String passLogin;
+byte lightMatrix;
 int idWebSite = 0;
 long timeLogout = 120000;
 long timeNextMessage = 60000;
@@ -85,29 +103,44 @@ long baudMotion;
 int showCurrentMessage = 0;
 int lengthMessageActive ;
 
+volatile int watchdogCount = 0;
+void ISRwatchdog() {
+  watchdogCount++;
+  Serial.println("Ticker!" + String(watchdogCount));
+  if ( watchdogCount >= 2 ) {
+     // Only print to serial when debugging
+    Serial.println("The dog bites!");
+//     ESP.reset();
+        // ESP.restart();
+    ESP.reset();
+  }
+}
+
 void setup()
 {
-  delay(500);
+  delay(2000);
   Serial.begin(115200);
   Serial.println();
-  show("Start:" + String(ADDR_JSON_MESSAGE) + " Lenght:" + String(512 - ADDR_JSON_MESSAGE));
   BeginEEPROM();
+  show("Start:" + String(ADDR_JSON_MESSAGE) + " Lenght:" + String(512 - ADDR_JSON_MESSAGE));
+  Serial.println(ESP.getCpuFreqMHz());
   GPIO();
   idWebSite = 0;
   isLogin = false;
-  if (EEPROM.read(500) == EEPROM.read(0) || flagClear) {
+  if (EEPROM.read(511) == EEPROM.read(0) || flagClear) {
     ClearEEPROM();
     ConfigDefault();
     WriteConfig();
   }
   ReadConfig();
-  WiFi.mode(WIFI_AP_STA);
-  delay(2000);
-  ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000); 
-  if (WiFi.status() != WL_CONNECTED) {
-    WiFi.mode(WIFI_AP);
-    show("Set WIFI_AP");
-  }
+  #if MODE_STATION 
+    WiFi.mode(WIFI_AP_STA);
+    ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000); 
+    if (WiFi.status() != WL_CONNECTED) {
+      WiFi.mode(WIFI_AP);
+      show("Set WIFI_AP");
+    }
+  #endif
   AccessPoint();
   StartServer();
   show("End Setup()");
@@ -119,7 +152,6 @@ void setup()
   String json1 = "";
   parsed["arr"].printTo(json1);
   show(json1);
-
   dmd.setBrightness(1);
   dmd.begin();
   //  clear/init the DMD pixels held in RAM
@@ -128,20 +160,47 @@ void setup()
   char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
   dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
   refreshShowMessage();
-
+  secondTick.attach(5, ISRwatchdog);
+  ESP.wdtDisable();
+  ESP.wdtEnable(WDTO_8S);
 }
+long tCheckClient;
+int listClient;
+int tWatchDog;
 void loop()
-{
-  server.handleClient();
+{ 
+  ESP.wdtFeed();
+  if (millis() - tWatchDog > 1000) {
+    watchdogCount = 0;
+    tWatchDog = millis();
+  }
+  if (listClient > 0) {
+    server.handleClient();
+  }
+  if (millis() - tCheckClient > 2000) {
+    if (listClient != WiFi.softAPgetStationNum()) {
+      listClient = WiFi.softAPgetStationNum();
+      show("listClient" + String(listClient));
+      if (listClient > 0) {
+        dmd.end();
+        show("dmd.end");
+      } else {
+        dmd.begin();
+        show("dmd.begin");
+        refreshShowMessage();
+      }
+    }
+    tCheckClient = millis();
+  }
   if (millis() - t > timeLogout) {
     isLogin = false;
     t = millis();
   }
-  if (millis() - tNext > timeNextMessage) {
+  if (listClient == 0 && lengthMessageActive > 1 && millis() - tNext > timeNextMessage) {
     showMatrix();
     tNext = millis();
   }
-  if (lengthMessageActive > 0 && !currentMotion.equals("stop")) {
+  if (listClient == 0 && lengthMessageActive > 0 && !currentMotion.equals("stop")) {
     if (millis() - tMotion > baudMotion) {
       onMotion();
       tMotion = millis();
@@ -160,7 +219,7 @@ void loop()
       setup();
     }
   }
-  delay(10);
+  // delay(1);
 }
 
 void show(String s)
@@ -187,17 +246,17 @@ void showMatrix() {
   if (lengthMessage > 0) {
     JsonArray& arrayMessageActive = listMessageActiveStatus();
     lengthMessageActive = arrayMessageActive.size(); 
-    show("MessageActiveStatus: " + String(lengthMessageActive));
+    // show("MessageActiveStatus: " + String(lengthMessageActive));
     if (lengthMessageActive > 0) {
       String stg = "";
       arrayMessageActive.printTo(stg);
-      show(stg);
+      // show(stg);
       stg = "";
       show("Get showCurrentIndex : " + String(showCurrentIndex));
       JsonObject& objectMessage = arrayMessageActive[showCurrentIndex];
-      show("objectMessage:");
+      // show("objectMessage:");
       (arrayMessageActive[showCurrentIndex]).printTo(stg);
-      show(stg);
+      // show(stg);
       showCurrentIndex++;
       matrixSeting(objectMessage);
       if (showCurrentIndex >= lengthMessageActive) {
@@ -211,6 +270,7 @@ void showMatrix() {
   }
 }
 void refreshShowMessage() {
+  show("refreshShowMessage");
   showCurrentIndex = 0;
   tNext = millis();
   showMatrix();
@@ -220,9 +280,14 @@ void matrixSeting(JsonObject& message) {
   String strMessage = "";
   message.printTo(strMessage);
   show(strMessage);
+  if (strMessage.length() <= 10) {
+    show("strMessage.length() <= 10");
+    refreshShowMessage();
+    setup();
+  }
   String strName = message["name"];
   if (strName.length() > 0) {
-    dmd.clearScreen();
+    // dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
@@ -349,6 +414,8 @@ void ConfigDefault()
   apPASS = AP_PASS_DEFAULT;
   passLogin =  PASS_LOGIN_DEFAULT;
   parsed["arr"] = JSONBuffer.createArray();
+  timeNextMessage = TIME_TIME_NEXT_MSG_DEFAULT;
+  lightMatrix = LIGHT_MATRIX_DEFAULT;
   // JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
   show("Config Default");
 }
@@ -360,7 +427,8 @@ void WriteConfig()
   String JSONMessage = "";
   parsed.printTo(JSONMessage);
   SaveStringToEEPROM(JSONMessage, ADDR_JSON_MESSAGE);
-
+  SaveLongToEEPROM(timeNextMessage, ADDR_TIME_NEXT_MSG);
+  SaveCharToEEPROM(lightMatrix, LIGHT_MATRIX_DEFAULT);
   show("Write Config");
 }
 void ReadConfig()
@@ -369,10 +437,14 @@ void ReadConfig()
   apPASS = ReadStringFromEEPROM(ADDR_APPASS);
   passLogin = ReadStringFromEEPROM(ADDR_PASS_LOGIN);
   String JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
+  timeNextMessage = ReadLongFromEEPROM(ADDR_TIME_NEXT_MSG);
+  lightMatrix = ReadCharFromEEPROM(LIGHT_MATRIX_DEFAULT);
   show("Read Config");
   show("Access Point: \n" + apSSID + "\n" + apPASS);
   show("Pass login: \n" + passLogin);
   show("Json Message: \n" + String(JSONMessage.length()));
+  show("Time next message: \n" + String(timeNextMessage));
+  show("Light matrix:\n" + lightMatrix);
   initialJson(JSONMessage);
 }
 
@@ -426,6 +498,7 @@ void StartServer()
 }
 
 void login() {
+  // // dmd.end();
   GiaTriThamSo();
   String html = Title();
   if (isLogin == false) {
@@ -438,9 +511,12 @@ void login() {
   //   html += ContentVerifyRestart();
   // }else html += ContentLogin();
   server.send ( 200, "text/html",html);
+  //  interrupts();
+  // dmd.begin();
 }
 
 void websetting() {
+  // dmd.end();
   String html = Title();
   if (isLogin == false) {
     html += ContentLogin();
@@ -448,9 +524,10 @@ void websetting() {
     html += ContentConfig();
   }
   server.send ( 200, "text/html",html);
+  // dmd.begin();
 }
 void webConfigMessage() {
-
+  // dmd.end();
   String html = Title();
   if (isLogin == false) {
     html += ContentLogin();
@@ -458,8 +535,10 @@ void webConfigMessage() {
     html += configMessage();
   }
   server.send ( 200, "text/html",html);
+  // dmd.begin();
 }
 void webListMessage() {
+  // dmd.end();
   String html = Title();
   if (isLogin == false) {
     html += ContentLogin();
@@ -467,6 +546,7 @@ void webListMessage() {
     html += contentListMessage();
   }
   server.send ( 200, "text/html",html);
+  // dmd.begin();
 }
 void restartDevice() {
   String html = Title();
@@ -601,6 +681,7 @@ String ContentLogin(){
   return content;
 }
 String ContentConfig(){
+  GiaTriThamSo();
   String content = "<body>\
     <div class=\"head1\">\
       <h1>Cài đặt thiết bị</h1>\
@@ -617,6 +698,9 @@ String ContentConfig(){
         <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" disabled required></div></div>\
         <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
         <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
+        <div class=\"subtitle\">Cài đặt bảng LED</div>\
+        <div class=\"row-block\"><div class=\"left\">Thời gian chuyển nội dung tiếp theo:</div>\
+        <div class=\"right\"><input class=\"input\" type=\"number\" placeholder=\"Time next message\" maxlength=\"10\" min=\"1000\" name=\"txtTimeNextMsg\" value=\"" + timeNextMessage + "\"></div></div>\
         <hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
@@ -638,7 +722,7 @@ String configMessage(){
   bool status = false;
   int light = 1;
   const char * motion = "stop";
-  long minBaud = 20, maxBaud = 5000;
+  long minBaud = 50, maxBaud = 5000;
   long baud = minBaud;
   if (isEdit) {
     JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
@@ -664,19 +748,25 @@ String configMessage(){
         <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
         <div class=\"right\"><textarea rows='2' name=\"txtNameMessage\" placeholder='Message' required>" + (strlen(name) > 0 ? name : "Noi dung moi") + "</textarea></div>\
         <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
-        <div class=\"right\">" + dropdownFonts(font) + "</div>\
+        <div class=\"right\">" + dropdownFonts(font) + "</div></div>\
         <div class=\"row-block\"><div class=\"left\">Cường độ sáng :</div>\
         <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(light) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
         <div class=\"row-block\"><div class=\"left\">Chuyển động :</div>\
-        <div class=\"right\">\
-        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"stop\" " + String(strcmp(motion,"stop") == 0 ?  "checked" : "") + "><span class=\"label\">Không</span><br/>\
-        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"left\" " + String(strcmp(motion,"left") == 0 ?  "checked" : "") + "><span class=\"label\">Trái qua phải</span><br/>\
-        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"right\" " + String(strcmp(motion,"right") == 0 ?  "checked" : "") + "><span class=\"label\">Phải qua trái</span><br/>\
-        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"top\" " + String(strcmp(motion,"top") == 0 ?  "checked" : "") + "><span class=\"label\">Trên xuống dưới</span><br/>\
-        <input type=\"radio\" name=\"chboxMotionMessage\" value=\"bottom\" " + String(strcmp(motion,"bottom") == 0 ?  "checked" : "") + "><span class=\"label\">Dưới lên trên</span><br/>\
-        </div>\
+        <div class=\"right\">" + dropdownMotions(motion) + "</div></div>\
         <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động (Nếu có) :</div>\
         <div class=\"right\"><input class=\"input\" type=\"number\" value=\"" + String(baud) + "\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" oninput=\"if(value.length>4)value=" + String(maxBaud)+ ";if(value.length == 0)value=" + String(minBaud) + "\"></div></div>\
+        <div class=\"row-block\"><div class=\"left\">Hiển thị theo trục X :</div>\
+        <div class=\"right\">\
+        <input type=\"number\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\" disabled>\
+        <button type=\"button\" onclick=\"btnXClickUpDown('txtXMessage', -1)\">-</button>\
+        <button type=\"button\" onclick=\"btnXClickUpDown('txtXMessage', 1)\">+</button>\
+        </div></div>\
+        <div class=\"row-block\"><div class=\"left\">Hiển thị theo trục X :</div>\
+        <div class=\"right\">\
+        <input type=\"number\" id=\"txtYMessage\" name=\"txtYMessage1\" value=\"0\" disabled>\
+        <button type=\"button\" onclick=\"btnXClickUpDown('txtYMessage', -1)\">-</button>\
+        <button type=\"button\" onclick=\"btnXClickUpDown('txtYMessage', 1)\">+</button>\
+        </div></div>\
         <br><hr>\
         <div class=\"listBtn\">\
           <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
@@ -690,7 +780,11 @@ String configMessage(){
         output.innerHTML = slider.value;\
         slider.oninput = function() {\
           output.innerHTML = this.value;\
-        }\
+        };\
+        var btnXClickUpDown = function(id,count) {\
+          var x = document.getElementById(id).value;\
+          document.getElementById(id).value = parseInt(x) + count;\
+        };\
       </script>\
     </div>\
   </body>\
@@ -755,6 +849,18 @@ String dropdownFonts(String font) {
   s += "</select>";
   return s;
 }
+
+String dropdownMotions(String motion) {
+  String s ="";
+  s += "<select class=\"input\" name=\"chboxMotionMessage\">";
+  s += "<option value=\"stop\"" + String(motion.equals("stop") ? "selected" : "") + ">Không</option>";
+  s += "<option value=\"left\"" + String(motion.equals("left") ? "selected" : "") + ">Trái qua phải</option>";
+  s += "<option value=\"right\"" + String(motion.equals("right") ? "selected" : "") + ">Phải qua trái</option>";
+  s += "<option value=\"top\"" + String(motion.equals("top") ? "selected" : "") + ">Trên xuống dưới</option>";
+  s += "<option value=\"bottom\"" + String(motion.equals("botton") ? "selected" : "") + ">Dưới lên trên</option>";
+  s += "</select>";
+  return s;
+}
 String SendListMessage()
 {
   String s="";
@@ -801,7 +907,7 @@ void GiaTriThamSo()
     String Name=server.argName(i); 
     String Value=String( server.arg(i)) ;
     String s1=Name+ ": " +Value;
-    // show(s1);
+    // show("--" + s1);
     if (isLogin == true) {
       if (Name.indexOf("txtLogout") >= 0){
         isLogin = false;
@@ -813,6 +919,7 @@ void GiaTriThamSo()
       }
       else if (Name.indexOf("txtAPName") >= 0){
         if (Value != staSSID && Value != apSSID && Value.length() > 0){
+          apSSID = Value;
           show("Set apSSID : " + Value);
         }
       }
@@ -830,6 +937,12 @@ void GiaTriThamSo()
         if (Value != passLogin){
           passLogin = Value;
           show("Set passLogin : " + Value);
+        }
+      }
+      else if (Name.indexOf("txtTimeNextMsg") >= 0){
+        if (Value.equals(String(timeNextMessage)) == false) {
+          timeNextMessage = atol(Value.c_str());
+          show("Set timeNextMessage : " + timeNextMessage); 
         }
       }
       else if (Name.indexOf("txtRestart") >= 0){
@@ -920,7 +1033,7 @@ void GiaTriThamSo()
             show("Add message");
           }
           parsed.printTo(strJson);
-          show(strJson); 
+          // show(strJson); 
           if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
             array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
             show("Out EEPROM");
