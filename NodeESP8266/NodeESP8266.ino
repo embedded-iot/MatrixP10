@@ -103,6 +103,7 @@ String Fonts[FONT_SIZE] = {"Font_1"};
 String startMsg = "I ready!";
 
 String currentMotion = "stop";
+long repeatMotion;
 long baudMotion;
 int showCurrentMessage = 0;
 int lengthMessageActive ;
@@ -110,7 +111,7 @@ int lengthMessageActive ;
 volatile int watchdogCount = 0;
 void ISRwatchdog() {
   watchdogCount++;
-  Serial.println("Ticker!" + String(watchdogCount));
+  // Serial.println("Ticker!" + String(watchdogCount));
   if ( watchdogCount >= 2 ) {
      // Only print to serial when debugging
     Serial.println("The dog bites!");
@@ -172,6 +173,7 @@ void setup()
 long tCheckClient;
 int listClient;
 int tWatchDog;
+long countRepeat;
 void loop()
 { 
   
@@ -207,13 +209,15 @@ void loop()
     isLogin = false;
     t = millis();
   }
-  if (listClient == 0 && lengthMessageActive > 1 && millis() - tNext > timeNextMessage) {
+  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >= repeatMotion) {
     showMatrix();
-    tNext = millis();
+    countRepeat = 0;
   }
   if (listClient == 0 && lengthMessageActive > 0 && !currentMotion.equals("stop")) {
     if (millis() - tMotion > baudMotion) {
       onMotion();
+      countRepeat++;
+      show("countRepeat:" + String(countRepeat));
       tMotion = millis();
     }
   }
@@ -244,7 +248,7 @@ void onMotion() {
     dmd.marqueeScrollX(1);
   } else if (currentMotion.equals("right")) {
     dmd.marqueeScrollX(-1);
-  } else if (currentMotion.equals("top")) {
+  } else if (currentMotion.equals("up")) {
     dmd.marqueeScrollY(1);
   } else if (currentMotion.equals("bottom")) {
     dmd.marqueeScrollY(-1);
@@ -307,6 +311,7 @@ void matrixSeting(JsonObject& message) {
     }
     int light = message["light"];
     dmd.setBrightness(light);
+    repeatMotion = message["repeat"];
     baudMotion = message["baud"];
     String motion = message["motion"];
     currentMotion = motion;
@@ -592,7 +597,6 @@ String Title(){
     body {font-size: 12px;width: 100%; height: 100%;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
     .head1{ display: flex; height: 50px;border-bottom: red 3px solid;}\
     .head1 h1{margin: auto;}\
-    table, th, td { border: 1px solid black;border-collapse: collapse;}\
     tr{ height: 40px;text-align: center;font-size: 20px;}\
     .input, input { height: 25px;text-align: center;width: 90%;}\
     input[type=\"radio\"] {width: auto;}\
@@ -604,19 +608,11 @@ String Title(){
     .left {text-align: right}\
     .listBtn {width: 100%; display: inline-block; text-align: center}\
     a {text-decoration: none;}\
-    table {width: 100%;}\
-    .column {width: 50%;text-align: center;}\
-    .column3 {width: 33.3%;text-align: center;}\
-    .noboder {border: none;}\
-    .card-rf {background: yellow;color: red;font-size: 90px;text-align: center;}\
     .align-left {text-align: left;}\
-    .small-table .row {height: auto;}\
-    .tr-active {background: #0095ff !important;}\
-    .important {color: red;}\
     .row-block {display: inline-block; width: 100%;}\
     .slider {width: 100%;}\
     .slidecontainer {width: 90%;display: inline-block;vertical-align: top;}\
-    .hidden-block {display: none;}\    
+    .display-none {display: none;}\    
     .display-contents {display: contents;}\
     @media only screen and (min-width: 768px) {\
       body {width: 600px;font-size: 16px;}\
@@ -754,8 +750,11 @@ String configMessage(){
   bool status = false;
   int light = 1;
   const char * motion = "stop";
-  long minBaud = 50, maxBaud = 5000;
+  long minBaud = 50, maxBaud = 2000;
   long baud = minBaud;
+  long minRepeat = 1, maxRepeat = 5000;
+  long repeat = minRepeat;
+  
   if (isEdit) {
     JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
     name = item["name"];
@@ -763,6 +762,7 @@ String configMessage(){
     font = item["font"];
     light = item["light"];
     motion = item["motion"];
+    repeat = item["repeat"];
     baud = item["baud"];
   }
 
@@ -772,19 +772,20 @@ String configMessage(){
     </div>\
     <div class=\"content\">\
       <form action=\"\" method=\"get\">\
-        <div class=\"row-block hidden-block\"><div class=\"left\">Thông điệp số :</div>\
-        <div class=\"right\">" + String(currentIndex) +"</div></div>\
+        <div class=\"matrix-block\"><marquee id=\"myMarquee\">Hi There!</marquee><span id=\"txtMessage\"></span></div>\
         <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
         <div class=\"right\"><input type=\"radio\" name=\"chboxStatusMessage\" value=\"true\" " + String(status ?  "checked" : "") + "><span class=\"label\">Có</span>\
         <input type=\"radio\" name=\"chboxStatusMessage\" value=\"false\" " + String(!status ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
         <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
-        <div class=\"right\"><textarea rows='2' name=\"txtNameMessage\" placeholder='Message' required>" + (strlen(name) > 0 ? name : "Noi dung moi") + "</textarea></div>\
+        <div class=\"right\"><textarea rows='2' id=\"idNameMessage\" name=\"txtNameMessage\" placeholder='Message' required oninput=\"onChangeText()\">" + (strlen(name) > 0 ? name : "") + "</textarea></div>\
         <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
         <div class=\"right\">" + dropdownFonts(font) + "</div></div>\
         <div class=\"row-block\"><div class=\"left\">Hiệu ứng chuyển động :</div>\
         <div class=\"right\">" + dropdownMotions(motion) + "</div></div>\
         <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động :</div>\
         <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" value=\"" + String(baud) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+        <div class=\"row-block\"><div class=\"left\">Số lần lặp lại hiệu ứng :</div>\
+        <div class=\"right\"><input type=\"number\" name=\"txtRepeatMessage\" min=\"" + String(minRepeat) + "\" max=\"" + String(maxRepeat) + "\" value=\"" + String(repeat) + "\"></div>\
         <div class=\"row-block\"><div class=\"left\">Tọa độ hiển thị :</div>\
         <div class=\"right\">\
         <div><input type=\"number\" class=\"display-contents\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\">\
@@ -808,22 +809,56 @@ String configMessage(){
       .arrow-left {margin-right: 32px;transform: rotate(-180deg);}\
       .arrow-bottom {transform: rotate(90deg);}\
       @media only screen and (min-width: 768px) {\
-        .arrow {display: inline-block; cursor: pointer;width:0px;height:0px;border-bottom:20px solid transparent;border-top:20px solid transparent;border-left:30px solid #2f2f2f;}\
+        .arrow {border-bottom:20px solid transparent;border-top:20px solid transparent;border-left:30px solid #2f2f2f;}\
         .arrow:hover {border-left:30px solid red;}\
         .arrow-left {margin-right: 54px;}\
       }\
+      .matrix-block {height:75px; border: 1px solid red;}\
+      #myMarquee, #txtMessage {height: 100%; font-size: 40px;}\
       </style>\
-      <script type=\"text/javascript\">\
+      <script>\
         var slider = document.getElementById(\"rangeLight\");\
         var output = document.getElementById(\"txtRangeLight\");\
+        var eleMsg = document.getElementById(\"idNameMessage\");\
+        var eMar = document.getElementById(\"myMarquee\");\
+        var eMsg = document.getElementById(\"txtMessage\");\
         output.innerHTML = slider.value;\
         slider.oninput = function() {\
           output.innerHTML = this.value;\
+          eMar.scrollDelay = this.value;\
+          reMar();\
         };\
+        function reMar(){eMar.stop();eMar.start();}\
+        function showMarquee(flag){\
+          if (flag) {eMar.style.display=\"block\";eMsg.style.display=\"none\";}\
+          else {eMar.style.display=\"none\";eMsg.style.display=\"block\";}\
+        }\
         function btnXClickUpDown(id,count) {\
-          document.getElementById(id).value = parseInt(document.getElementById(id).value) + count;\
-          console.log(document.getElementById(id).value);\
+          var eleByID = document.getElementById(id);\
+          eleByID.value = parseInt(eleByID.value) + count;\
         };\
+        function onChangeText() {\
+          eMar.innerHTML = eleMsg.value;\
+          eMsg.innerHTML =  eleMsg.value;\
+        };\
+        function setMotion(motion) {\
+          if (motion == \"stop\") {\
+            showMarquee(0);\
+          } else {\
+          eMar.direction = motion;\
+          showMarquee(1);}\
+          reMar();\
+        }\
+        function onMotion(elem) {\
+          var motion = elem.options[elem.selectedIndex].value;\
+          setMotion(motion);\
+        };\
+        function init() {\
+          eMar.innerHTML = eleMsg.value;\
+          eMsg.innerHTML = eleMsg.value;\
+          setMotion('" + motion + "');\
+        };\
+        init();\
       </script>\
     </div>\
   </body>\
@@ -871,7 +906,6 @@ String contentListMessage(){
             }\
           }\
           param += 'btnSaveList=true';\
-          console.log(param);\
           window.location.href = param;\
         };\
       </script>\
@@ -892,12 +926,12 @@ String dropdownFonts(String font) {
 
 String dropdownMotions(String motion) {
   String s ="";
-  s += "<select class=\"input\" name=\"chboxMotionMessage\">";
+  s += "<select class=\"input\" onchange=\"onMotion(this);\" name=\"chboxMotionMessage\">";
   s += "<option value=\"stop\"" + String(motion.equals("stop") ? "selected" : "") + ">Không</option>";
   s += "<option value=\"left\"" + String(motion.equals("left") ? "selected" : "") + ">Trái qua phải</option>";
   s += "<option value=\"right\"" + String(motion.equals("right") ? "selected" : "") + ">Phải qua trái</option>";
-  s += "<option value=\"top\"" + String(motion.equals("top") ? "selected" : "") + ">Trên xuống dưới</option>";
-  s += "<option value=\"bottom\"" + String(motion.equals("botton") ? "selected" : "") + ">Dưới lên trên</option>";
+  s += "<option value=\"up\"" + String(motion.equals("up") ? "selected" : "") + ">Trên xuống dưới</option>";
+  s += "<option value=\"down\"" + String(motion.equals("down") ? "selected" : "") + ">Dưới lên trên</option>";
   s += "</select>";
   return s;
 }
@@ -1054,6 +1088,10 @@ void GiaTriThamSo()
       else if (Name.indexOf("chboxMotionMessage") >= 0){
         object["motion"] = Value;
         show("Set chboxMotionMessage : " + Value);
+      }      
+      else if (Name.indexOf("txtRepeatMessage") >= 0){
+        object["repeat"] = Value.toInt();
+        show("Set txtRepeatMessage : " + Value);
       }
       else if (Name.indexOf("txtBaudMessage") >= 0){
         object["baud"] = Value.toInt();
