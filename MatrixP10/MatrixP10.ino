@@ -10,7 +10,10 @@
 //Fire up the DMD library as dmd
 #define DISPLAYS_ACROSS 2
 #define DISPLAYS_DOWN 1
-SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire display
+//SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire display
+SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN);
+// DMD_TextBox box(dmd, 0, 0, 64, 16);
+DMD_TextBox box(dmd);  
 
 const char* ssid = "TTQ";
 const char* password = "0987654321";
@@ -109,23 +112,28 @@ void setup() {
   ConvertStringToArrayChar("U Ú Ù Ụ Ủ Ũ", true);
   s1 = ConvertStringToArrayChar("UÚÙỤỦŨ", false);
   ShowArray(s1);
+  ConvertStringToArrayChar("Ư Ứ Ừ Ự Ử Ữ", true);
+  s1 = ConvertStringToArrayChar("ƯỨỪỰỬỮ", false);
+  ShowArray(s1);
   ConvertStringToArrayChar("Y Ý Ỳ Ỵ Ỷ Ỹ", true);
   s1 = ConvertStringToArrayChar("YÝỲỴỶỸ", false);
   ShowArray(s1);
-
-  ConvertStringToArrayChar("Ư Ứ Ừ Ự Ử Ữ", true);
+  s1 = dmd.ConvertStringToArrayChar("YÝỲỴỶỸ", false);
+  s1 = dmd.ConvertStringToArrayChar("NGUYỄN VĂN QUÂN", false);
 
   dmd.setBrightness(1);
   dmd.selectFont(Font_1);
   dmd.begin();
   //  clear/init the DMD pixels held in RAM
   dmd.clearScreen();   //true is normal (all pixels off), false is negative (all pixels on)
+  // dmd.drawString(0, 0, F("NGUYEN VAN QUAN"));
 }
 
 void loop() {
 //  server.handleClient();
  testString();
 //  testScroll();
+  // scroll1();
 }
 
 void web() {
@@ -309,7 +317,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
           else if (y[i+1] == 154) { tg = "Ú"; c = 246; }
           else if (y[i+1] == 153) { tg = "Ù"; c = 247; }
 
-          else if (y[i+1] == 157) { tg = "Ý"; c = 256; }
+          else if (y[i+1] == 157) { tg = "Ý"; c = 258 - 255; resultConvert[len++] = 255;}
 
 
         } else if (y[i] == 196 && i < length - 1) {
@@ -337,6 +345,8 @@ char* ConvertStringToArrayChar(String x, bool display) {
           else if (y[i+1] == 176) { tg = "ư"; c = 184; }
 
           else if (y[i+1] == 160) { tg = "Ơ"; c = 240; }
+
+          else if (y[i+1] == 175) { tg = "Ư"; c = 251; }
 
         }
         resultConvert[len++] = c;
@@ -454,10 +464,16 @@ char* ConvertStringToArrayChar(String x, bool display) {
             else if (y[i+2] == 164) { tg = "Ụ"; c = 248; }
             else if (y[i+2] == 166) { tg = "Ủ"; c = 249; }
 
-            else if (y[i+2] == 178) { tg = "Ỳ"; c = 257; }
-            else if (y[i+2] == 180) { tg = "Ỵ"; c = 258; }
-            else if (y[i+2] == 182) { tg = "Ỷ"; c = 259; }
-            else if (y[i+2] == 184) { tg = "Ỹ"; c = 260; }
+            else if (y[i+2] == 168) { tg = "Ứ"; c = 252; }
+            else if (y[i+2] == 170) { tg = "Ừ"; c = 253; }
+            else if (y[i+2] == 176) { tg = "Ự"; c = 254; }
+            else if (y[i+2] == 172) { tg = "Ử"; c = 256 - 255; resultConvert[len++] = 255;}
+            else if (y[i+2] == 174) { tg = "Ữ"; c = 257 - 255; resultConvert[len++] = 255;}
+
+            else if (y[i+2] == 178) { tg = "Ỳ"; c = 259 - 255; resultConvert[len++] = 255;}
+            else if (y[i+2] == 180) { tg = "Ỵ"; c = 260 - 255; resultConvert[len++] = 255;}
+            else if (y[i+2] == 182) { tg = "Ỷ"; c = 261 - 255; resultConvert[len++] = 255;}
+            else if (y[i+2] == 184) { tg = "Ỹ"; c = 262 - 255; resultConvert[len++] = 255;}
 
 
 
@@ -468,6 +484,7 @@ char* ConvertStringToArrayChar(String x, bool display) {
         i = i + 2;
       }
     }
+    // show("\nlen:" + String(len) + "\n");
   }
   resultConvert[len] = '\0';
   return resultConvert;
@@ -517,21 +534,23 @@ void testString() {
   // MSG = ConvertStringToArrayChar("UVWXYZ", false);
 
 
-  MSG = ConvertStringToArrayChar("AÁÀẠẢÃ", false);
-  MSG = ConvertStringToArrayChar("ĂẮẰẶẲẴ", false);
-  MSG = ConvertStringToArrayChar("ẮẰẶẲẴ", false);
-  MSG = ConvertStringToArrayChar("ÂẤẦẬẨẪ", false);
-  MSG = ConvertStringToArrayChar("DĐ", false);
-  MSG = ConvertStringToArrayChar("EÉÈẸẺẼ", false);
-  MSG = ConvertStringToArrayChar("ÊẾỀỆỂỄ", false);
-  MSG = ConvertStringToArrayChar("IÍÌỊỈĨ", false);
-  MSG = ConvertStringToArrayChar("OÓÒỌỎÕ", false);
-  MSG = ConvertStringToArrayChar("ÔỐỒỘỔỖ", false);
-  MSG = ConvertStringToArrayChar("ỐỒỘỔỖ", false);
-  MSG = ConvertStringToArrayChar("ƠỚỜỢỞỠ", false);
-  MSG = ConvertStringToArrayChar("ỚỜỢỞỠ", false);
-  MSG = ConvertStringToArrayChar("UÚÙỤỦŨ", false);
-  MSG = ConvertStringToArrayChar("YÝỲỴỶỸ", false);
+  // MSG = ConvertStringToArrayChar("AÁÀẠẢÃ", false);
+  // MSG = ConvertStringToArrayChar("ĂẮẰẶẲẴ", false);
+  // MSG = ConvertStringToArrayChar("ẮẰẶẲẴ", false);
+  // MSG = ConvertStringToArrayChar("ÂẤẦẬẨẪ", false);
+  // MSG = ConvertStringToArrayChar("DĐ", false);
+  // MSG = ConvertStringToArrayChar("EÉÈẸẺẼ", false);
+  // MSG = ConvertStringToArrayChar("ÊẾỀỆỂỄ", false);
+  // MSG = ConvertStringToArrayChar("IÍÌỊỈĨ", false);
+  // MSG = ConvertStringToArrayChar("OÓÒỌỎÕ", false);
+  // MSG = ConvertStringToArrayChar("ÔỐỒỘỔỖ", false);
+  // MSG = ConvertStringToArrayChar("ỐỒỘỔỖ", false);
+  // MSG = ConvertStringToArrayChar("ƠỚỜỢỞỠ", false);
+  // MSG = ConvertStringToArrayChar("ỚỜỢỞỠ", false);
+  // MSG = dmd.ConvertStringToArrayChar("UÚÙỤỦŨ", false);
+  // MSG = dmd.ConvertStringToArrayChar("ƯỨỪỰỬỮ", false);
+  // MSG = ConvertStringToArrayChar("ỰỬỮ", false);
+  MSG = dmd.ConvertStringToArrayChar("YÝỲỴỶỸ", false);
 //  for (int i = 0; i < 26; i++) {
 //    dmd.fillScreen(false);
 //    MSG = ConvertStringToArrayChar(arrayMsg[i], false);
@@ -540,16 +559,39 @@ void testString() {
 //  }
     dmd.fillScreen(false);
     dmd.drawString(0,0, MSG, GRAPHICS_ON); 
-    delay(10000);
+    delay(2000);
 }
-DMD_TextBox box(dmd);  // "box" provides a text box to automatically write to/scroll the display
+DMD_TextBox box1(dmd);  // "box" provides a text box to automatically write to/scroll the display
 void testScroll() {
-  const char *next = ConvertStringToArrayChar("Cẩm Phả - Quảng Ninh ", false);
+  const char *next = ConvertStringToArrayChar("NGUYỄN VĂN QUÂN", false);
   while(*next) {
     Serial.print(*next);
-    box.print(*next);
-    delay(600);
+    box1.print(*next);
+    delay(500);
     next++;
   }
 }
+int phase = 0; // 0-3, 'phase' value determines direction
+void scroll1() {
+  int steps = random(48); // Each time we scroll a random distance
+  for(int i = 0; i < steps; i++) {
+    // Do a different type of scroll, depending on which phase we are in
+    switch(0) {
+      case 0:
+       dmd.marqueeScrollX(1); break;
+      case 1:
+       dmd.marqueeScrollX(-1); break;
+      case 2:
+       dmd.marqueeScrollY(1); break;
+      case 3:
+       dmd.marqueeScrollY(-1); break;
+    }
+    delay(100);
+  }
 
+  // Move to the next phase
+  phase = (phase + 1) % 4;
+}
+
+void scrollTest() {
+}
