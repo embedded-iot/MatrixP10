@@ -29,6 +29,7 @@
 #include <DMD2.h>        //
 #include <fonts/Font_1.h>
 
+#include <FS.h>
 #include <Ticker.h>
 Ticker secondTick;
 
@@ -64,6 +65,8 @@ IPAddress subnet(255, 255, 255, 0);
 
 #define NAME_DEFAULT "MBELL"
 #define PASS_DEFAULT "1234567890"
+//#define STA_SSID_DEFAULT "Gear"
+//#define STA_PASS_DEFAULT "Quan1995"
 #define STA_SSID_DEFAULT "TTQ"
 #define STA_PASS_DEFAULT "0987654321"
 #define AP_SSID_DEFAULT NAME_DEFAULT
@@ -148,9 +151,13 @@ void setup()
     }
   #endif
   AccessPoint();
+  if (!SPIFFS.begin()){
+     show("SPIFFS Mount failed");
+   } else {
+     show("SPIFFS Mount succesfull");
+   }
   StartServer();
   show("End Setup()");
- 
   // String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
   // String JSONMessage = "[{'status':'true','name':'nguyen van quan','font':'Font 2','light':'40','motion':'left','baud':'400'}]";
   // char JSONMessage[] = "[{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"}]";
@@ -506,13 +513,24 @@ void ConfigNetwork(){
 }
 void StartServer()
 {
-  server.on("/", login);
+  server.serveStatic("/js", SPIFFS, "/js");
+  server.serveStatic("/css", SPIFFS, "/css");
+  server.serveStatic("/fonts", SPIFFS, "/fonts");
+  server.serveStatic("/img", SPIFFS, "/img");
+  server.serveStatic("/resources", SPIFFS, "/resources");
+  server.serveStatic("/lib", SPIFFS, "/lib");
+  server.serveStatic("/", SPIFFS, "/index.html");
+
+  server.on("/login", login);
+  server.on("/isLogin", checkLogin);
+  server.on("/logout", logout);
   server.on("/setting", websetting);
-  server.on("/settingMessage", webConfigMessage);
+  server.on("/matrixSetting", matrixSetting);
+//  server.on("/settingMessage", webConfigMessage);
   server.on("/listMessage", webListMessage);
   server.on("/restart", restartDevice);
   server.on("/verifyDelete", verifyDeleteMessage);
-  server.onNotFound(handleNotFound);
+//  server.onNotFound(handleNotFound);
   server.begin();
   show("HTTP server started");
 }
@@ -520,32 +538,38 @@ void StartServer()
 void login() {
   // // dmd.end();
   GiaTriThamSo();
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
-  }
-  else {
-    html += contentListMessage();
-  }
-  // else if (idWebSite == 2) {
-  //   html += ContentVerifyRestart();
-  // }else html += ContentLogin();
-  server.send ( 200, "text/html",html);
-  //  interrupts();
-  // dmd.begin();
+  String json = "{\"isLogin\":" + String(isLogin ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+
+void checkLogin() {
+  String json = "{\"isLogin\":" + String(isLogin ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+
+void logout() {
+  isLogin = false;
+  checkLogin();
+  show("Logout!");
 }
 
 void websetting() {
-  // dmd.end();
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
-  } else {
-    html += ContentConfig();
-  }
-  server.send ( 200, "text/html",html);
-  // dmd.begin();
+  GiaTriThamSo();
+  String json = "{\"txtAPName\":\"" + apSSID + "\",\
+                \"txtAPPass\":\"" + apPASS + "\",\
+                \"txtPassLogin\":\"" + passLogin + "\"}";
+  server.send(200, "application/json", json);
 }
+void matrixSetting() {
+  GiaTriThamSo();
+  String json = "{\"txtDisplayAcross\":" + String(DISPLAYS_ACROSS) + ",\
+                \"txtDisplayDown\":" + DISPLAYS_DOWN + ",\
+                \"txtLightMessage\":" + lightMatrix + ",\
+                \"txtMinLight\":" + String(1) + ",\
+                \"txtMaxLight\":" + String(255) + "}";
+  server.send(200, "application/json", json);
+}
+
 void webConfigMessage() {
   // dmd.end();
   String html = Title();
@@ -558,33 +582,18 @@ void webConfigMessage() {
   // dmd.begin();
 }
 void webListMessage() {
-  // dmd.end();
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
-  } else {
-    html += contentListMessage();
-  }
-  server.send ( 200, "text/html",html);
-  // dmd.begin();
+  String json = "";
+  parsed["arr"].printTo(json);
+  server.send(200, "application/json", json);
 }
 void restartDevice() {
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
-  } else {
-    html += ContentVerifyRestart();
-  }
-  server.send ( 200, "text/html",html);
+  String json = "{\"restartDevice\": true}";
+  server.send(200, "application/json", json);
+  GiaTriThamSo();
 }
 void verifyDeleteMessage() {
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
-  } else {
-    html += ContentVerifyDelete();
-  }
-  server.send ( 200, "text/html",html);
+
+  // txtVerifyDelete=true
 }
 String Title(){
   String html = "<html>\
@@ -979,9 +988,9 @@ void GiaTriThamSo()
   for (uint8_t i=0; i<server.args(); i++){
      
     String Name=server.argName(i); 
-    String Value=String( server.arg(i)) ;
-    String s1=Name+ ": " +Value;
-    // show("--" + s1);
+    String Value=String(server.arg(i)) ;
+    String s1= Name+ ": " +Value;
+    show("--" + s1);
     if (isLogin == true) {
       if (Name.indexOf("txtLogout") >= 0){
         isLogin = false;
@@ -1024,19 +1033,7 @@ void GiaTriThamSo()
         show("Verify restart");
         show(Value);
       }
-      else if (Name.indexOf("btnSaveSetting") >= 0)
-      {
-        WriteConfig();
-        show("Save config");
-      }
-      else if (Name.indexOf("txtVerifyRestart") >= 0)
-      {
-        if ( Value.indexOf("true") >= 0 ) {
-          show("txtVerifyRestart:" + Value);
-          show("Restart Device");
-          setup();
-        }
-      }
+
       else if (Name.indexOf("txtIndexMessage") >= 0)
       {
         currentIndex = Value.toInt();
@@ -1124,6 +1121,19 @@ void GiaTriThamSo()
           refreshShowMessage();
         }
       }
+      else if (Name.indexOf("btnSaveSetting") >= 0)
+      {
+        WriteConfig();
+        show("Save config");
+      }
+      else if (Name.indexOf("txtVerifyRestart") >= 0)
+      {
+        if ( Value.indexOf("true") >= 0 ) {
+          show("txtVerifyRestart:" + Value);
+          show("Restart Device");
+          setup();
+        }
+      }
       else if (Name.indexOf("btnSaveList") >= 0){
         if ( Value.indexOf("true") >= 0 ) {
           show("Save List Message to EEPROM!");
@@ -1142,7 +1152,7 @@ void GiaTriThamSo()
         show("Set Password : " + PassWord);
       }
 
-      if (Name.indexOf("txtPassword") >= 0 && UserName.equals(apSSID) && PassWord.equals(passLogin)){
+      if (UserName.equals(apSSID) && PassWord.equals(passLogin)){
         isLogin = true;
         show("Login == true");
       } else {
