@@ -526,8 +526,9 @@ void StartServer()
   server.on("/logout", logout);
   server.on("/setting", websetting);
   server.on("/matrixSetting", matrixSetting);
-//  server.on("/settingMessage", webConfigMessage);
+  server.on("/createMessage", createMessage);
   server.on("/listMessage", webListMessage);
+  server.on("/getSettings", getSettings);
   server.on("/restart", restartDevice);
   server.on("/verifyDelete", verifyDeleteMessage);
 //  server.onNotFound(handleNotFound);
@@ -535,6 +536,23 @@ void StartServer()
   show("HTTP server started");
 }
 
+void getSettings() {
+  String strfonts = "[";
+  for (int i = 0; i < FONT_SIZE; i++) {
+    strfonts += "\"" + Fonts[i] + "\"";
+    if (i < FONT_SIZE - 1) {
+       strfonts += ",";
+    }
+  }
+  strfonts += "]";
+  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"}]";
+  String json = "{\"txtFonts\":" + strfonts + ",\
+                  \"txtMotions\":" + motions + ",\
+                  \"txtMinBaud\":" + String(50) + ",\
+                  \"txtMaxBaud\":" + String(1000) + "}";
+  show(json);
+  server.send(200, "application/json", json);
+}
 void login() {
   // // dmd.end();
   GiaTriThamSo();
@@ -570,16 +588,23 @@ void matrixSetting() {
   server.send(200, "application/json", json);
 }
 
-void webConfigMessage() {
-  // dmd.end();
-  String html = Title();
-  if (isLogin == false) {
-    html += ContentLogin();
+void createMessage() {
+  int lengthMessage = parsed["arr"].size();
+  String json = "";
+  if (server.method() == HTTP_GET) {
+    json = "{\"txtIndexMessage\":" + String(lengthMessage) + ",\
+              \"chboxStatusMessage\":false,\
+              \"txtNameMessage\": \"New message\",\
+              \"txtFontMessage\":\"" + Fonts[0] + "\",\
+              \"chboxMotionMessage\":\"stop\",\
+              \"txtRepeatMessage\":" + String(1) + ",\
+              \"txtBaudMessage\":" + String(200) + "}";
   } else {
-    html += configMessage();
+    GiaTriThamSo();
+    int newLengthMessage = parsed["arr"].size();
+    json = "{\"btnSaveMessage\":" + String(newLengthMessage > lengthMessage ? "true" : "false") + "}";
   }
-  server.send ( 200, "text/html",html);
-  // dmd.begin();
+  server.send(200, "application/json", json);
 }
 void webListMessage() {
   String json = "";
@@ -587,13 +612,16 @@ void webListMessage() {
   server.send(200, "application/json", json);
 }
 void restartDevice() {
+  GiaTriThamSo();
   String json = "{\"restartDevice\": true}";
   server.send(200, "application/json", json);
-  GiaTriThamSo();
 }
 void verifyDeleteMessage() {
-
-  // txtVerifyDelete=true
+  int lengthMessage = parsed["arr"].size();
+  GiaTriThamSo();
+  int newLengthMessage = parsed["arr"].size();
+  String json = "{\"btnDeleleMessage\":" + String(newLengthMessage < lengthMessage ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
 }
 String Title(){
   String html = "<html>\
@@ -934,6 +962,8 @@ String dropdownFonts(String font) {
 }
 
 String dropdownMotions(String motion) {
+
+  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"}]";
   String s ="";
   s += "<select class=\"input\" onchange=\"onMotion(this);\" name=\"chboxMotionMessage\">";
   s += "<option value=\"stop\"" + String(motion.equals("stop") ? "selected" : "") + ">Không</option>";
@@ -982,9 +1012,8 @@ void GiaTriThamSo()
   String UserName, PassWord;
 
   int lengthMessage = parsed["arr"].size();
-  bool isEdit = currentIndex < lengthMessage;
   JsonObject &object = JSONBuffer.createObject();
-
+  bool isbtnSaveSetting = false, isbtnSaveMessage = false, istxtVerifyDelete = false;
   for (uint8_t i=0; i<server.args(); i++){
      
     String Name=server.argName(i); 
@@ -1050,8 +1079,7 @@ void GiaTriThamSo()
       else if (Name.indexOf("txtVerifyDelete") >= 0)
       {
         if ( Value.indexOf("true") >= 0 ) {
-          show("txtVerifyDelete: " + Value);
-          DeleteMessage(currentIndex);
+          istxtVerifyDelete = true;
         }
       }
       else if (Name.indexOf("chboxStatus") >= 0 && Name.length() <= 12)
@@ -1096,35 +1124,12 @@ void GiaTriThamSo()
       }
       else if (Name.indexOf("btnSaveMessage") >= 0){
         if ( Value.indexOf("true") >= 0 ) {
-          show("Set btnSaveMessage : " + Value);
-          String strJson = "";
-          // object.printTo(strJson);
-          // show(strJson); 
-          JsonArray& array1 = parsed["arr"];
-          if (isEdit) { 
-            JsonObject& object1 = parsed["arr"][currentIndex];
-            array1[currentIndex] = object;
-            show("Edit message");
-          } else {
-            array1.add(object);
-            show("Add message");
-          }
-          parsed.printTo(strJson);
-          // show(strJson); 
-          if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
-            array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
-            show("Out EEPROM");
-          } else {
-            WriteConfig();
-            // ReadConfig();
-          }
-          refreshShowMessage();
+          isbtnSaveMessage = true;
         }
       }
       else if (Name.indexOf("btnSaveSetting") >= 0)
       {
-        WriteConfig();
-        show("Save config");
+        isbtnSaveSetting = true;
       }
       else if (Name.indexOf("txtVerifyRestart") >= 0)
       {
@@ -1162,8 +1167,46 @@ void GiaTriThamSo()
     Name = "";
     Value = "";
   }
-  if (isLogin == false)
+  if (isLogin == false) {
     idWebSite = 0;
+  }
+  if (isbtnSaveSetting) {
+     WriteConfig();
+     show("Save config");
+  } else if (isbtnSaveMessage) {
+    show("Set btnSaveMessage: true");
+    String strJson = "";
+    // object.printTo(strJson);
+    // show(strJson);
+    JsonArray& array1 = parsed["arr"];
+    bool isEdit = currentIndex < lengthMessage;
+    if (isEdit) {
+      JsonObject& object1 = parsed["arr"][currentIndex];
+      array1[currentIndex] = object;
+      show("Edit message");
+    } else {
+      array1.add(object);
+      show("Add message");
+    }
+    parsed.printTo(strJson);
+    // show(strJson);
+    if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
+      array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
+      show("Out EEPROM");
+    } else {
+      WriteConfig();
+      // ReadConfig();
+    }
+    WriteConfig();
+    show("Save config");
+    refreshShowMessage();
+  } else if (istxtVerifyDelete) {
+    show("txtVerifyDelete: true");
+    DeleteMessage(currentIndex);
+    WriteConfig();
+    show("Save config");
+  }
+
 }
 void handleNotFound(){
   String message = "File Not Found\n\n";
