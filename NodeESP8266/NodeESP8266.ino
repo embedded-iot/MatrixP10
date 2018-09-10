@@ -49,7 +49,7 @@ ESP8266WebServer server(80);
 #define RESET 3 
 #define LED 2
 #define DEBUGGING true
-#define MODE_STATION true
+#define MODE_STATION false
 IPAddress staticIP(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
@@ -149,13 +149,20 @@ void setup()
       WiFi.mode(WIFI_AP);
       show("Set WIFI_AP");
     }
+  #else
+      AccessPoint();
   #endif
-  AccessPoint();
-  if (!SPIFFS.begin()){
-     show("SPIFFS Mount failed");
-   } else {
-     show("SPIFFS Mount succesfull");
-   }
+
+  SPIFFS.begin();
+    {
+      Dir dir = SPIFFS.openDir("/");
+      while (dir.next()) {
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        Serial.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
+      }
+      Serial.printf("\n");
+    }
   StartServer();
   show("End Setup()");
   // String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
@@ -339,6 +346,67 @@ void blinkLed(int numberRepeat, long tdelay) {
     digitalWrite(LED,LOW);delay(tdelay);
   }
 }
+//format bytes
+String formatBytes(size_t bytes) {
+  if (bytes < 1024) {
+    return String(bytes) + "B";
+  } else if (bytes < (1024 * 1024)) {
+    return String(bytes / 1024.0) + "KB";
+  } else if (bytes < (1024 * 1024 * 1024)) {
+    return String(bytes / 1024.0 / 1024.0) + "MB";
+  } else {
+    return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
+  }
+}
+
+String getContentType(String filename) {
+  if (server.hasArg("download")) {
+    return "application/octet-stream";
+  } else if (filename.endsWith(".htm")) {
+    return "text/html";
+  } else if (filename.endsWith(".html")) {
+    return "text/html";
+  } else if (filename.endsWith(".css")) {
+    return "text/css";
+  } else if (filename.endsWith(".js")) {
+    return "application/javascript";
+  } else if (filename.endsWith(".png")) {
+    return "image/png";
+  } else if (filename.endsWith(".gif")) {
+    return "image/gif";
+  } else if (filename.endsWith(".jpg")) {
+    return "image/jpeg";
+  } else if (filename.endsWith(".ico")) {
+    return "image/x-icon";
+  } else if (filename.endsWith(".xml")) {
+    return "text/xml";
+  } else if (filename.endsWith(".pdf")) {
+    return "application/x-pdf";
+  } else if (filename.endsWith(".zip")) {
+    return "application/x-zip";
+  } else if (filename.endsWith(".gz")) {
+    return "application/x-gzip";
+  }
+  return "text/plain";
+}
+bool handleFileRead(String path) {
+  show("handleFileRead: " + path);
+  if (path.endsWith("/")) {
+    path += "index.html";
+  }
+  String contentType = getContentType(path);
+  String pathWithGz = path + ".gz";
+  if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) {
+    if (SPIFFS.exists(pathWithGz)) {
+      path += ".gz";
+    }
+    File file = SPIFFS.open(path, "r");
+    server.streamFile(file, contentType);
+    file.close();
+    return true;
+  }
+  return false;
+}
 void GPIO()
 {
   show("GPIO");
@@ -513,13 +581,14 @@ void ConfigNetwork(){
 }
 void StartServer()
 {
-  server.serveStatic("/js", SPIFFS, "/js");
-  server.serveStatic("/css", SPIFFS, "/css");
-  server.serveStatic("/fonts", SPIFFS, "/fonts");
-  server.serveStatic("/img", SPIFFS, "/img");
-  server.serveStatic("/resources", SPIFFS, "/resources");
-  server.serveStatic("/lib", SPIFFS, "/lib");
-  server.serveStatic("/", SPIFFS, "/index.html");
+//  server.serveStatic("/js", SPIFFS, "/js");
+//  server.serveStatic("/css", SPIFFS, "/css");
+//  server.serveStatic("/fonts", SPIFFS, "/fonts");
+//  server.serveStatic("/img", SPIFFS, "/img");
+//  server.serveStatic("/resources", SPIFFS, "/resources");
+//  server.serveStatic("/lib", SPIFFS, "/lib");
+//  server.serveStatic("/", SPIFFS, "/index.html");
+
 
   server.on("/login", login);
   server.on("/isLogin", checkLogin);
@@ -531,7 +600,15 @@ void StartServer()
   server.on("/getSettings", getSettings);
   server.on("/restart", restartDevice);
   server.on("/verifyDelete", verifyDeleteMessage);
+  server.on("/updateStatus", updateStatus);
 //  server.onNotFound(handleNotFound);
+  //called when the url is not defined here
+  //use it to load content from SPIFFS
+  server.onNotFound([]() {
+    if (!handleFileRead(server.uri())) {
+      server.send(404, "text/plain", "FileNotFound");
+    }
+  });
   server.begin();
   show("HTTP server started");
 }
@@ -621,6 +698,11 @@ void verifyDeleteMessage() {
   GiaTriThamSo();
   int newLengthMessage = parsed["arr"].size();
   String json = "{\"btnDeleleMessage\":" + String(newLengthMessage < lengthMessage ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+void updateStatus() {
+  GiaTriThamSo();
+  String json = "{\"btnSaveList\": true}";
   server.send(200, "application/json", json);
 }
 String Title(){
@@ -1082,15 +1164,14 @@ void GiaTriThamSo()
           istxtVerifyDelete = true;
         }
       }
-      else if (Name.indexOf("chboxStatus") >= 0 && Name.length() <= 12)
-      { 
-        String index = Name.substring(Name.length() - 1, Name.length());
-        show("Set " + Name + " :" + Value);
+      else if (Name.indexOf("updatechboxStatus") >= 0)
+      {
+        bool status = false;
         if ( Value.indexOf("true") >= 0 ) {
-          UpdateMessage(index.toInt(), "status", true);
-        } else  {
-          UpdateMessage(index.toInt(), "status", false);
+          status = true;
         }
+        show("Set chboxStatus " + String(currentIndex) + " :" + Value);
+        UpdateMessage(currentIndex, "status", status);
       }
       else if (Name.indexOf("chboxStatusMessage") >= 0){
         object["status"] = ( Value.equals("true") ? true : false);
