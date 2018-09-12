@@ -49,7 +49,7 @@ ESP8266WebServer server(80);
 #define RESET 3 
 #define LED 2
 #define DEBUGGING true
-#define MODE_STATION false
+#define MODE_STATION true
 IPAddress staticIP(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
@@ -319,7 +319,9 @@ void matrixSeting(JsonObject& message) {
     // dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
-    dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
+    int marginTop = message["top"];
+    int marginLeft = message["left"];
+    dmd.drawString(marginTop, marginLeft, nameMessage, GRAPHICS_ON);
     if (font.equals("Font_1")) {
       dmd.selectFont(Font_1);
     }
@@ -674,6 +676,8 @@ void createMessage() {
               \"txtNameMessage\": \"New message\",\
               \"txtFontMessage\":\"" + Fonts[0] + "\",\
               \"chboxMotionMessage\":\"stop\",\
+              \"txtMarginTopMessage\":" + String(0) + ",\
+              \"txtMarginLeftMessage\":" + String(0) + ",\
               \"txtRepeatMessage\":" + String(1) + ",\
               \"txtBaudMessage\":" + String(200) + "}";
   } else {
@@ -1095,7 +1099,7 @@ void GiaTriThamSo()
 
   int lengthMessage = parsed["arr"].size();
   JsonObject &object = JSONBuffer.createObject();
-  bool isbtnSaveSetting = false, isbtnSaveMessage = false, istxtVerifyDelete = false;
+  bool isbtnSaveSetting = false, isbtnSaveMessage = false, istxtVerifyDelete = false, isbtnSaveList = false;
   for (uint8_t i=0; i<server.args(); i++){
      
     String Name=server.argName(i); 
@@ -1199,6 +1203,14 @@ void GiaTriThamSo()
         object["repeat"] = Value.toInt();
         show("Set txtRepeatMessage : " + Value);
       }
+      else if (Name.indexOf("txtMarginTopMessage") >= 0){
+        object["top"] = Value.toInt();
+        show("Set txtMarginTopMessage : " + Value);
+      }
+      else if (Name.indexOf("txtMarginLeftMessage") >= 0){
+        object["left"] = Value.toInt();
+        show("Set txtMarginLeftMessage : " + Value);
+      }
       else if (Name.indexOf("txtBaudMessage") >= 0){
         object["baud"] = Value.toInt();
         show("Set txtBaudMessage : " + Value);
@@ -1222,9 +1234,7 @@ void GiaTriThamSo()
       }
       else if (Name.indexOf("btnSaveList") >= 0){
         if ( Value.indexOf("true") >= 0 ) {
-          show("Save List Message to EEPROM!");
-          WriteConfig();
-          refreshShowMessage();
+          isbtnSaveList = true;
         }
       }
       
@@ -1286,6 +1296,10 @@ void GiaTriThamSo()
     DeleteMessage(currentIndex);
     WriteConfig();
     show("Save config");
+  } else if (isbtnSaveList) {
+    show("Save List Message to EEPROM!");
+    WriteConfig();
+    refreshShowMessage();
   }
 
 }
