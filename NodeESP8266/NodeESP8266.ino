@@ -36,7 +36,7 @@ Ticker secondTick;
 
 // #define DEBUG_ESP_HTTP_SERVER
 //Fire up the DMD library as dmd
-#define DISPLAYS_ACROSS 6
+#define DISPLAYS_ACROSS 2
 #define DISPLAYS_DOWN 1
 //SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 5, 4, 12, 15);  // DMD controls the entire displaySPIDMD
 //SPIDMD dmd(DISPLAYS_ACROSS, DISPLAYS_DOWN, 16, 4, 12, 0);  // DMD controls the entire displaySPIDMD
@@ -49,7 +49,7 @@ ESP8266WebServer server(80);
 #define RESET 3 
 #define LED 2
 #define DEBUGGING true
-#define MODE_STATION true
+#define MODE_STATION false
 IPAddress staticIP(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
@@ -188,6 +188,8 @@ long tCheckClient;
 int listClient;
 int tWatchDog;
 long countRepeat;
+long tRepeat = 0;
+long strLengthMessage = 0;
 void loop()
 { 
   
@@ -223,11 +225,11 @@ void loop()
     isLogin = false;
     t = millis();
   }
-  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >= repeatMotion) {
+  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >=  (repeatMotion * strLengthMessage)) {
     showMatrix();
     countRepeat = 0;
   }
-  if (listClient == 0 && lengthMessageActive > 0 && !currentMotion.equals("stop")) {
+  if (listClient == 0 && lengthMessageActive > 0) {
     if (millis() - tMotion > baudMotion) {
       onMotion();
       countRepeat++;
@@ -319,6 +321,8 @@ void matrixSeting(JsonObject& message) {
     // dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
+    strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
+    show("stringWidth : " + String(strLengthMessage));
     int marginTop = message["top"];
     int marginLeft = message["left"];
     dmd.drawString(marginTop, marginLeft, nameMessage, GRAPHICS_ON);
@@ -709,383 +713,383 @@ void updateStatus() {
   String json = "{\"btnSaveList\": true}";
   server.send(200, "application/json", json);
 }
-String Title(){
-  String html = "<html>\
-  <head>\
-  <meta charset=\"utf-8\">\
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
-  <title>Config</title>\
-  <style>\
-    * {margin:0;padding:0; box-sizing: border-box;}\
-    body {font-size: 12px;width: 100%; height: 100%;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
-    .head1{ display: flex; height: 50px;border-bottom: red 3px solid;}\
-    .head1 h1{margin: auto;}\
-    tr{ height: 40px;text-align: center;font-size: 20px;}\
-    .input, input { height: 25px;text-align: center;width: 90%;}\
-    input[type=\"radio\"] {width: auto;}\
-    button {height: 25px;min-width: 100px;margin: 5px;}\
-    button:hover {background: #ccc; font-weight: bold; cursor: pointer;}\
-    .subtitle {text-align: left;font-weight: bold;}\
-    .content {padding: 10px 20px;}\
-    .left , .right { width: 50%; float: left;text-align: left;line-height: 25px;padding: 5px; vertical-align: top;}\
-    .left {text-align: right}\
-    .listBtn {width: 100%; display: inline-block; text-align: center}\
-    a {text-decoration: none;}\
-    .align-left {text-align: left;}\
-    .row-block {display: inline-block; width: 100%;}\
-    .slider {width: 100%;}\
-    .slidecontainer {width: 90%;display: inline-block;vertical-align: top;}\
-    .display-none {display: none;}\    
-    .display-contents {display: contents;}\
-    @media only screen and (min-width: 768px) {\
-      body {width: 600px;font-size: 16px;}\
-      .item-message {width: 50% !important; padding: 10px !important;}\
-      }\
-    textarea {padding: 5px 10px;width: 90%;}\
-    .label { vertical-align: top;}\
-    .item-message {width: 100%; display: inline-block; padding: 5px;}\
-    .status-message {display: inline-block; vertical-align: top;}\
-    .title-message {display: inline-block; line-height: 24px; font-weight: bold; cursor: pointer;}\
-  </style>\
-  <script>\
-    function goState(url) {\
-      console.log(url);\
-      window.location.href = url;\
-    };\
-  </script>\
-  </head>";
-  return html;
-}
-String ContentVerifyRestart() {
-  String content = "<body>\
-    <div class=\"head1\">\
-      <h1>Xác thực</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-      <div class=\"subtitle\">Bạn có muốn khởi động lại thiết bị?</div>\
-      <div class=\"listBtn\">\
-        <button type=\"button\" onclick=\"goState('/?txtVerifyRestart = true')\" >Đồng ý</button>\
-        <button type=\"button\" onclick=\"goState('/setting')\">Không</button>\
-      <div>\
-      </form>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String ContentVerifyDelete() {
-  String content = "<body>\
-    <div class=\"head1\">\
-      <h1>Xác thực</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-      <div class=\"subtitle\">Bạn có muốn xóa thông điệp \"" + String(currentIndex) + "\" hay không?</div>\
-      <div class=\"listBtn\">\
-        <button type=\"button\" onclick=\"goState('/listMessage?txtVerifyDelete=true')\" >Đồng ý</button>\
-        <button type=\"button\" onclick=\"goState('/settingMessage?txtIndexMessage =" + String(currentIndex) + "')\">Không</button>\
-      <div>\
-      </form>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String ContentLogin(){
-  String content = "<body>\
-    <div class=\"head1\">\
-      <h1>Đăng nhập</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Tài khoản :</div>\
-        <div class=\"right\"><input class=\"input\" placeholder=\"Name wifi\" name=\"txtUsername\" value=\""+apSSID+"\" required></div></div>\
-        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Mật khẩu :</div>\
-        <div class=\"right\"><input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassword\"></div></div>\
-        <div class=\"listBtn\">\
-        <div class=\"left\"></div>\
-        <div class=\"right\"><button type=\"submit\">Đăng nhập</button></div>\
-        </div>\
-      </form>\
-      <script>\
-        if (window.location.pathname != '/') {\
-          goState('/');\
-        }\
-      </script>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String ContentConfig(){
-  GiaTriThamSo();
-  String content = "<body>\
-    <div class=\"head1\">\
-      <h1>Cài đặt chung</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-        <div class=\"subtitle\">Chế độ Access Point (Phát ra wifi)</div>\
-        <div class=\"row-block\"><div class=\"left\">Tên wifi</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" required></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtAPPass\" value=\""+apPASS+"\"></div></div>\
-        <div class=\"subtitle\">Tài khoản đăng nhập</div>\
-        <div class=\"row-block\"><div class=\"left\">Tên tài khoản</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" disabled required></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
-        <div class=\"subtitle\">Cài đặt bảng LED</div>\
-        <div class=\"row-block\"><div class=\"left\">Số bảng chiều ngang</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_ACROSS + "\"></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Số bảng chiều dọc</div>\
-        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_DOWN + "\"></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Cường độ sáng</div>\
-        <div class=\"right\">: <div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(lightMatrix) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
-        </div>\
-        <hr>\
-        <div class=\"listBtn\">\
-          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
-          <button type=\"submit\" name=\"btnSaveSetting\" value=\"true\">Lưu cài đặt</button>\
-          <button type=\"button\" onclick=\"goState('/restart')\">Khởi động lại</button>\
-        </div>\
-        <script type=\"text/javascript\">\
-        var slider = document.getElementById(\"rangeLight\");\
-        var output = document.getElementById(\"txtRangeLight\");\
-        output.innerHTML = slider.value;\
-        slider.oninput = function() {\
-          output.innerHTML = this.value;\
-        };\
-      </script>\
-      </form>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String configMessage(){
-  GiaTriThamSo();
-  int lengthMessage = parsed["arr"].size();
-  bool isEdit = currentIndex < lengthMessage;
-  const char * name = "Noi dung moi";
-  const char * font = Fonts[0].c_str();
-  bool status = false;
-  int light = 1;
-  const char * motion = "stop";
-  long minBaud = 50, maxBaud = 2000;
-  long baud = minBaud;
-  long minRepeat = 1, maxRepeat = 5000;
-  long repeat = minRepeat;
-  
-  if (isEdit) {
-    JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
-    name = item["name"];
-    status = (bool)item["status"] == true ? true : false;
-    font = item["font"];
-    light = item["light"];
-    motion = item["motion"];
-    repeat = item["repeat"];
-    baud = item["baud"];
-  }
-
-  String content = "<body>\
-    <div class=\"head1\">\
-    <h1>" + String(isEdit ? "Cài đặt thông điệp" : "Thông điệp mới") +"</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-        <div class=\"matrix-block\"><marquee id=\"myMarquee\">Hi There!</marquee><span id=\"txtMessage\"></span></div>\
-        <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
-        <div class=\"right\"><input type=\"radio\" name=\"chboxStatusMessage\" value=\"true\" " + String(status ?  "checked" : "") + "><span class=\"label\">Có</span>\
-        <input type=\"radio\" name=\"chboxStatusMessage\" value=\"false\" " + String(!status ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
-        <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
-        <div class=\"right\"><textarea rows='2' id=\"idNameMessage\" name=\"txtNameMessage\" placeholder='Message' required oninput=\"onChangeText()\">" + (strlen(name) > 0 ? name : "") + "</textarea></div>\
-        <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
-        <div class=\"right\">" + dropdownFonts(font) + "</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Hiệu ứng chuyển động :</div>\
-        <div class=\"right\">" + dropdownMotions(motion) + "</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động :</div>\
-        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" value=\"" + String(baud) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
-        <div class=\"row-block\"><div class=\"left\">Số lần lặp lại hiệu ứng :</div>\
-        <div class=\"right\"><input type=\"number\" name=\"txtRepeatMessage\" min=\"" + String(minRepeat) + "\" max=\"" + String(maxRepeat) + "\" value=\"" + String(repeat) + "\"></div>\
-        <div class=\"row-block\"><div class=\"left\">Tọa độ hiển thị :</div>\
-        <div class=\"right\">\
-        <div><input type=\"number\" class=\"display-contents\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\">\
-        <input type=\"number\" class=\"display-contents\" id=\"txtYMessage\" name=\"txtYMessage1\" value=\"0\"></div>\
-        <div class=\"row-arrow\"><div class=\"arrow arrow-top\" onclick=\"btnXClickUpDown('txtYMessage', -1)\"></div></div>\
-        <div class=\"row-arrow\"><div class=\"arrow arrow-left\" onclick=\"btnXClickUpDown('txtXMessage', -1)\"></div><div class=\"arrow arrow-right\" onclick=\"btnXClickUpDown('txtXMessage', 1)\"></div></div>\
-        <div class=\"row-arrow\"><div class=\"arrow arrow-bottom\" onclick=\"btnXClickUpDown('txtYMessage', 1)\"></div></div>\
-        </div></div>\
-        <br><hr>\
-        <div class=\"listBtn\">\
-          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
-          <button type=\"submit\" name=\"btnSaveMessage\" value=\"true\">Lưu lại</button>\
-          <button " + (isEdit ? "" : "style='display:none;'") +" type=\"button\" onclick=\"goState('/verifyDelete?txtIndexMessage =" + String(currentIndex) + "')\">Xóa</button>\
-        </div>\
-      </form>\
-      <style type=\"text/css\">\
-      .row-arrow {text-align: center; width: 90%;}\
-      .arrow {display: inline-block; cursor: pointer;width:0px;height:0px;border-bottom:10px solid transparent;border-top:10px solid transparent;border-left:15px solid #2f2f2f;}\
-      .arrow:hover {border-left:15px solid red;}\
-      .arrow-top {transform: rotate(-90deg);}\
-      .arrow-left {margin-right: 32px;transform: rotate(-180deg);}\
-      .arrow-bottom {transform: rotate(90deg);}\
-      @media only screen and (min-width: 768px) {\
-        .arrow {border-bottom:20px solid transparent;border-top:20px solid transparent;border-left:30px solid #2f2f2f;}\
-        .arrow:hover {border-left:30px solid red;}\
-        .arrow-left {margin-right: 54px;}\
-      }\
-      .matrix-block {height:75px; border: 1px solid red;}\
-      #myMarquee, #txtMessage {height: 100%; font-size: 40px;}\
-      </style>\
-      <script>\
-        var slider = document.getElementById(\"rangeLight\");\
-        var output = document.getElementById(\"txtRangeLight\");\
-        var eleMsg = document.getElementById(\"idNameMessage\");\
-        var eMar = document.getElementById(\"myMarquee\");\
-        var eMsg = document.getElementById(\"txtMessage\");\
-        output.innerHTML = slider.value;\
-        slider.oninput = function() {\
-          output.innerHTML = this.value;\
-          eMar.scrollDelay = this.value;\
-          reMar();\
-        };\
-        function reMar(){eMar.stop();eMar.start();}\
-        function showMarquee(flag){\
-          if (flag) {eMar.style.display=\"block\";eMsg.style.display=\"none\";}\
-          else {eMar.style.display=\"none\";eMsg.style.display=\"block\";}\
-        }\
-        function btnXClickUpDown(id,count) {\
-          var eleByID = document.getElementById(id);\
-          eleByID.value = parseInt(eleByID.value) + count;\
-        };\
-        function onChangeText() {\
-          eMar.innerHTML = eleMsg.value;\
-          eMsg.innerHTML =  eleMsg.value;\
-        };\
-        function setMotion(motion) {\
-          if (motion == \"stop\") {\
-            showMarquee(0);\
-          } else {\
-          eMar.direction = motion;\
-          showMarquee(1);}\
-          reMar();\
-        }\
-        function onMotion(elem) {\
-          var motion = elem.options[elem.selectedIndex].value;\
-          setMotion(motion);\
-        };\
-        function init() {\
-          eMar.innerHTML = eleMsg.value;\
-          eMsg.innerHTML = eleMsg.value;\
-          setMotion('" + motion + "');\
-        };\
-        init();\
-      </script>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String contentListMessage(){
-  GiaTriThamSo();
-  String content = "<body>\
-    <div class=\"head1\">\
-    <h1>Danh sách thông điệp</h1>\
-    </div>\
-    <div class=\"content\">\
-      <form action=\"\" method=\"get\">\
-        " + SendListMessage() + "\
-        <br>\
-        <hr>\
-        <div class=\"listBtn\">\
-          <button type=\"button\" onclick=\"goState('/settingMessage?txtAddMessage=true')\">Thêm thông điệp</button>\
-          <button type=\"button\" " + (parsed["arr"].size() <= 0 ? "style='display:none;'" : " ") +" onclick=\"saveMessage()\">Lưu lại</button>\
-          <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt chung</button>\
-        </div>\
-      </form>\
-       <style type=\"text/css\">\
-        input[type=checkbox]{height: 0;width: 0;visibility: hidden;}\
-        label {	cursor: pointer;	text-indent: -9999px;	width: 50px;	height: 24px;	background: grey;	display: block;	border-radius: 22px;	position: relative;}\
-        label:after {	content: '';	position: absolute;	top: 2px;	left: 2px;	width: 20px;	height: 20px;	background: #fff;	border-radius: 20px;	transition: 0.3s;}\
-        input:checked + label {	background: #4cda64;}\
-        input:checked + label:after {left: calc(100% - 2px);transform:translateX(-100%);}\
-      </style>\
-      <script type=\"text/javascript\">\
-        var configMessage = function(index) {\
-          var url = \"/settingMessage?txtIndexMessage=\" + index;\
-          window.location.href = url;\
-        };\
-        var saveMessage = function() {\
-          var listCheckbox= document.getElementsByTagName('input');\
-          var param = '/listMessage?';\
-          for(var i = 0; i < listCheckbox.length; i++) {\
-            if(listCheckbox[i].type=='checkbox') {\
-              if (listCheckbox[i].checked == true) {\
-                param += 'chboxStatus'+ i + '=true';\
-              } else param += 'chboxStatus'+ i + '=false';\
-              param += '&';\
-            }\
-          }\
-          param += 'btnSaveList=true';\
-          window.location.href = param;\
-        };\
-      </script>\
-    </div>\
-  </body>\
-  </html>";
-  return content;
-}
-String dropdownFonts(String font) {
-  String s ="";
-  s += "<select class=\"input\" name=\"txtFontMessage\">";
-  for (int i = 0; i< 4; i++) {
-    s += "<option value=\"" + Fonts[i] + "\" " + ((font == Fonts[i]) ? "selected" : "") + ">" + (Fonts[i]) + "</option>";
-  }
-  s += "</select>";
-  return s;
-}
-
-String dropdownMotions(String motion) {
-
-  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"}]";
-  String s ="";
-  s += "<select class=\"input\" onchange=\"onMotion(this);\" name=\"chboxMotionMessage\">";
-  s += "<option value=\"stop\"" + String(motion.equals("stop") ? "selected" : "") + ">Không</option>";
-  s += "<option value=\"left\"" + String(motion.equals("left") ? "selected" : "") + ">Trái qua phải</option>";
-  s += "<option value=\"right\"" + String(motion.equals("right") ? "selected" : "") + ">Phải qua trái</option>";
-  s += "<option value=\"up\"" + String(motion.equals("up") ? "selected" : "") + ">Trên xuống dưới</option>";
-  s += "<option value=\"down\"" + String(motion.equals("down") ? "selected" : "") + ">Dưới lên trên</option>";
-  s += "</select>";
-  return s;
-}
-String SendListMessage()
-{
-  String s="";
-  String json1 = "";
-  int length = parsed["arr"].size();
-  show("SendListMessage length:" + String(length));
-  // for (int i = 0; i < length; i++) {
-  //   JsonObject& itemOb = parsed["arr"][i];
-  //   json1 = "";
-  //   itemOb.printTo(json1);
-  //   show(json1);
-  // }
-  for (int i = 0; i < length ;i++ ) {
-    String id = String(i);
-    JsonObject& item = parsed["arr"][i];  //Implicit cast
-    const char * name = item["name"];
-    // Serial.println(status == true ? "true" : "false");
-    String status = (bool)item["status"] ==  true ? " checked " : "" ;
-    s += "<div class=\"item-message\">\
-    <div class=\"status-message\"><input type=\"checkbox\" name=\"chboxStatus" + id + "\"" + status + "id=\"switch" + id + "\" /><label for=\"switch" + id + "\"></label></div>\
-    <div class=\"title-message\" onclick=\"configMessage(" + id +")\">" + name + "</div>\
-    </div>";
-  }
-  //show(s);
-  return s;
-}
+//String Title(){
+//  String html = "<html>\
+//  <head>\
+//  <meta charset=\"utf-8\">\
+//  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\
+//  <title>Config</title>\
+//  <style>\
+//    * {margin:0;padding:0; box-sizing: border-box;}\
+//    body {font-size: 12px;width: 100%; height: 100%;border: red 3px solid; margin: 0 auto; box-sizing: border-box}\
+//    .head1{ display: flex; height: 50px;border-bottom: red 3px solid;}\
+//    .head1 h1{margin: auto;}\
+//    tr{ height: 40px;text-align: center;font-size: 20px;}\
+//    .input, input { height: 25px;text-align: center;width: 90%;}\
+//    input[type=\"radio\"] {width: auto;}\
+//    button {height: 25px;min-width: 100px;margin: 5px;}\
+//    button:hover {background: #ccc; font-weight: bold; cursor: pointer;}\
+//    .subtitle {text-align: left;font-weight: bold;}\
+//    .content {padding: 10px 20px;}\
+//    .left , .right { width: 50%; float: left;text-align: left;line-height: 25px;padding: 5px; vertical-align: top;}\
+//    .left {text-align: right}\
+//    .listBtn {width: 100%; display: inline-block; text-align: center}\
+//    a {text-decoration: none;}\
+//    .align-left {text-align: left;}\
+//    .row-block {display: inline-block; width: 100%;}\
+//    .slider {width: 100%;}\
+//    .slidecontainer {width: 90%;display: inline-block;vertical-align: top;}\
+//    .display-none {display: none;}\    
+//    .display-contents {display: contents;}\
+//    @media only screen and (min-width: 768px) {\
+//      body {width: 600px;font-size: 16px;}\
+//      .item-message {width: 50% !important; padding: 10px !important;}\
+//      }\
+//    textarea {padding: 5px 10px;width: 90%;}\
+//    .label { vertical-align: top;}\
+//    .item-message {width: 100%; display: inline-block; padding: 5px;}\
+//    .status-message {display: inline-block; vertical-align: top;}\
+//    .title-message {display: inline-block; line-height: 24px; font-weight: bold; cursor: pointer;}\
+//  </style>\
+//  <script>\
+//    function goState(url) {\
+//      console.log(url);\
+//      window.location.href = url;\
+//    };\
+//  </script>\
+//  </head>";
+//  return html;
+//}
+//String ContentVerifyRestart() {
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//      <h1>Xác thực</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//      <div class=\"subtitle\">Bạn có muốn khởi động lại thiết bị?</div>\
+//      <div class=\"listBtn\">\
+//        <button type=\"button\" onclick=\"goState('/?txtVerifyRestart = true')\" >Đồng ý</button>\
+//        <button type=\"button\" onclick=\"goState('/setting')\">Không</button>\
+//      <div>\
+//      </form>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String ContentVerifyDelete() {
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//      <h1>Xác thực</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//      <div class=\"subtitle\">Bạn có muốn xóa thông điệp \"" + String(currentIndex) + "\" hay không?</div>\
+//      <div class=\"listBtn\">\
+//        <button type=\"button\" onclick=\"goState('/listMessage?txtVerifyDelete=true')\" >Đồng ý</button>\
+//        <button type=\"button\" onclick=\"goState('/settingMessage?txtIndexMessage =" + String(currentIndex) + "')\">Không</button>\
+//      <div>\
+//      </form>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String ContentLogin(){
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//      <h1>Đăng nhập</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Tài khoản :</div>\
+//        <div class=\"right\"><input class=\"input\" placeholder=\"Name wifi\" name=\"txtUsername\" value=\""+apSSID+"\" required></div></div>\
+//        <div class=\"row-block\"><div class=\"row-block\"><div class=\"left\">Mật khẩu :</div>\
+//        <div class=\"right\"><input class=\"input\" type=\"password\" placeholder=\"Password\" name=\"txtPassword\"></div></div>\
+//        <div class=\"listBtn\">\
+//        <div class=\"left\"></div>\
+//        <div class=\"right\"><button type=\"submit\">Đăng nhập</button></div>\
+//        </div>\
+//      </form>\
+//      <script>\
+//        if (window.location.pathname != '/') {\
+//          goState('/');\
+//        }\
+//      </script>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String ContentConfig(){
+//  GiaTriThamSo();
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//      <h1>Cài đặt chung</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//        <div class=\"subtitle\">Chế độ Access Point (Phát ra wifi)</div>\
+//        <div class=\"row-block\"><div class=\"left\">Tên wifi</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" required></div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtAPPass\" value=\""+apPASS+"\"></div></div>\
+//        <div class=\"subtitle\">Tài khoản đăng nhập</div>\
+//        <div class=\"row-block\"><div class=\"left\">Tên tài khoản</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Name wifi\" maxlength=\"15\" name=\"txtAPName\" value=\""+apSSID+"\" disabled required></div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Mật khẩu</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" maxlength=\"15\" name=\"txtPassLogin\" value=\"" + passLogin + "\"></div></div>\
+//        <div class=\"subtitle\">Cài đặt bảng LED</div>\
+//        <div class=\"row-block\"><div class=\"left\">Số bảng chiều ngang</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_ACROSS + "\"></div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Số bảng chiều dọc</div>\
+//        <div class=\"right\">: <input class=\"input\" placeholder=\"Password wifi\" disabled value=\"" + DISPLAYS_DOWN + "\"></div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Cường độ sáng</div>\
+//        <div class=\"right\">: <div class=\"slidecontainer\"><input type=\"range\" name=\"txtLightMessage\" min=\"1\" max=\"255\" value=\"" + String(lightMatrix) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+//        </div>\
+//        <hr>\
+//        <div class=\"listBtn\">\
+//          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
+//          <button type=\"submit\" name=\"btnSaveSetting\" value=\"true\">Lưu cài đặt</button>\
+//          <button type=\"button\" onclick=\"goState('/restart')\">Khởi động lại</button>\
+//        </div>\
+//        <script type=\"text/javascript\">\
+//        var slider = document.getElementById(\"rangeLight\");\
+//        var output = document.getElementById(\"txtRangeLight\");\
+//        output.innerHTML = slider.value;\
+//        slider.oninput = function() {\
+//          output.innerHTML = this.value;\
+//        };\
+//      </script>\
+//      </form>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String configMessage(){
+//  GiaTriThamSo();
+//  int lengthMessage = parsed["arr"].size();
+//  bool isEdit = currentIndex < lengthMessage;
+//  const char * name = "Noi dung moi";
+//  const char * font = Fonts[0].c_str();
+//  bool status = false;
+//  int light = 1;
+//  const char * motion = "stop";
+//  long minBaud = 50, maxBaud = 2000;
+//  long baud = minBaud;
+//  long minRepeat = 1, maxRepeat = 5000;
+//  long repeat = minRepeat;
+//  
+//  if (isEdit) {
+//    JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
+//    name = item["name"];
+//    status = (bool)item["status"] == true ? true : false;
+//    font = item["font"];
+//    light = item["light"];
+//    motion = item["motion"];
+//    repeat = item["repeat"];
+//    baud = item["baud"];
+//  }
+//
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//    <h1>" + String(isEdit ? "Cài đặt thông điệp" : "Thông điệp mới") +"</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//        <div class=\"matrix-block\"><marquee id=\"myMarquee\">Hi There!</marquee><span id=\"txtMessage\"></span></div>\
+//        <div class=\"row-block\"><div class=\"left\">Trạng thái :</div>\
+//        <div class=\"right\"><input type=\"radio\" name=\"chboxStatusMessage\" value=\"true\" " + String(status ?  "checked" : "") + "><span class=\"label\">Có</span>\
+//        <input type=\"radio\" name=\"chboxStatusMessage\" value=\"false\" " + String(!status ?  "checked" : "") +"><span class=\"label\">Không</span></div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Nội dung thông điệp :</div>\
+//        <div class=\"right\"><textarea rows='2' id=\"idNameMessage\" name=\"txtNameMessage\" placeholder='Message' required oninput=\"onChangeText()\">" + (strlen(name) > 0 ? name : "") + "</textarea></div>\
+//        <div class=\"row-block\"><div class=\"left\">Font hiển thị :</div>\
+//        <div class=\"right\">" + dropdownFonts(font) + "</div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Hiệu ứng chuyển động :</div>\
+//        <div class=\"right\">" + dropdownMotions(motion) + "</div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Tốc độ chuyển động :</div>\
+//        <div class=\"right\"><div class=\"slidecontainer\"><input type=\"range\" name=\"txtBaudMessage\" min=\"" +String(minBaud)+ "\" max=\""+ String(maxBaud) +"\" value=\"" + String(baud) + "\" class=\"slider\" id=\"rangeLight\"><br/>(<span id=\"txtRangeLight\"></span>)</div></div>\
+//        <div class=\"row-block\"><div class=\"left\">Số lần lặp lại hiệu ứng :</div>\
+//        <div class=\"right\"><input type=\"number\" name=\"txtRepeatMessage\" min=\"" + String(minRepeat) + "\" max=\"" + String(maxRepeat) + "\" value=\"" + String(repeat) + "\"></div>\
+//        <div class=\"row-block\"><div class=\"left\">Tọa độ hiển thị :</div>\
+//        <div class=\"right\">\
+//        <div><input type=\"number\" class=\"display-contents\" id=\"txtXMessage\" name=\"txtXMessage1\" value=\"0\">\
+//        <input type=\"number\" class=\"display-contents\" id=\"txtYMessage\" name=\"txtYMessage1\" value=\"0\"></div>\
+//        <div class=\"row-arrow\"><div class=\"arrow arrow-top\" onclick=\"btnXClickUpDown('txtYMessage', -1)\"></div></div>\
+//        <div class=\"row-arrow\"><div class=\"arrow arrow-left\" onclick=\"btnXClickUpDown('txtXMessage', -1)\"></div><div class=\"arrow arrow-right\" onclick=\"btnXClickUpDown('txtXMessage', 1)\"></div></div>\
+//        <div class=\"row-arrow\"><div class=\"arrow arrow-bottom\" onclick=\"btnXClickUpDown('txtYMessage', 1)\"></div></div>\
+//        </div></div>\
+//        <br><hr>\
+//        <div class=\"listBtn\">\
+//          <button type=\"button\" onclick=\"goState('/listMessage')\">Trở về</button>\
+//          <button type=\"submit\" name=\"btnSaveMessage\" value=\"true\">Lưu lại</button>\
+//          <button " + (isEdit ? "" : "style='display:none;'") +" type=\"button\" onclick=\"goState('/verifyDelete?txtIndexMessage =" + String(currentIndex) + "')\">Xóa</button>\
+//        </div>\
+//      </form>\
+//      <style type=\"text/css\">\
+//      .row-arrow {text-align: center; width: 90%;}\
+//      .arrow {display: inline-block; cursor: pointer;width:0px;height:0px;border-bottom:10px solid transparent;border-top:10px solid transparent;border-left:15px solid #2f2f2f;}\
+//      .arrow:hover {border-left:15px solid red;}\
+//      .arrow-top {transform: rotate(-90deg);}\
+//      .arrow-left {margin-right: 32px;transform: rotate(-180deg);}\
+//      .arrow-bottom {transform: rotate(90deg);}\
+//      @media only screen and (min-width: 768px) {\
+//        .arrow {border-bottom:20px solid transparent;border-top:20px solid transparent;border-left:30px solid #2f2f2f;}\
+//        .arrow:hover {border-left:30px solid red;}\
+//        .arrow-left {margin-right: 54px;}\
+//      }\
+//      .matrix-block {height:75px; border: 1px solid red;}\
+//      #myMarquee, #txtMessage {height: 100%; font-size: 40px;}\
+//      </style>\
+//      <script>\
+//        var slider = document.getElementById(\"rangeLight\");\
+//        var output = document.getElementById(\"txtRangeLight\");\
+//        var eleMsg = document.getElementById(\"idNameMessage\");\
+//        var eMar = document.getElementById(\"myMarquee\");\
+//        var eMsg = document.getElementById(\"txtMessage\");\
+//        output.innerHTML = slider.value;\
+//        slider.oninput = function() {\
+//          output.innerHTML = this.value;\
+//          eMar.scrollDelay = this.value;\
+//          reMar();\
+//        };\
+//        function reMar(){eMar.stop();eMar.start();}\
+//        function showMarquee(flag){\
+//          if (flag) {eMar.style.display=\"block\";eMsg.style.display=\"none\";}\
+//          else {eMar.style.display=\"none\";eMsg.style.display=\"block\";}\
+//        }\
+//        function btnXClickUpDown(id,count) {\
+//          var eleByID = document.getElementById(id);\
+//          eleByID.value = parseInt(eleByID.value) + count;\
+//        };\
+//        function onChangeText() {\
+//          eMar.innerHTML = eleMsg.value;\
+//          eMsg.innerHTML =  eleMsg.value;\
+//        };\
+//        function setMotion(motion) {\
+//          if (motion == \"stop\") {\
+//            showMarquee(0);\
+//          } else {\
+//          eMar.direction = motion;\
+//          showMarquee(1);}\
+//          reMar();\
+//        }\
+//        function onMotion(elem) {\
+//          var motion = elem.options[elem.selectedIndex].value;\
+//          setMotion(motion);\
+//        };\
+//        function init() {\
+//          eMar.innerHTML = eleMsg.value;\
+//          eMsg.innerHTML = eleMsg.value;\
+//          setMotion('" + motion + "');\
+//        };\
+//        init();\
+//      </script>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String contentListMessage(){
+//  GiaTriThamSo();
+//  String content = "<body>\
+//    <div class=\"head1\">\
+//    <h1>Danh sách thông điệp</h1>\
+//    </div>\
+//    <div class=\"content\">\
+//      <form action=\"\" method=\"get\">\
+//        " + SendListMessage() + "\
+//        <br>\
+//        <hr>\
+//        <div class=\"listBtn\">\
+//          <button type=\"button\" onclick=\"goState('/settingMessage?txtAddMessage=true')\">Thêm thông điệp</button>\
+//          <button type=\"button\" " + (parsed["arr"].size() <= 0 ? "style='display:none;'" : " ") +" onclick=\"saveMessage()\">Lưu lại</button>\
+//          <button type=\"button\" onclick=\"goState('/setting')\">Cài đặt chung</button>\
+//        </div>\
+//      </form>\
+//       <style type=\"text/css\">\
+//        input[type=checkbox]{height: 0;width: 0;visibility: hidden;}\
+//        label {	cursor: pointer;	text-indent: -9999px;	width: 50px;	height: 24px;	background: grey;	display: block;	border-radius: 22px;	position: relative;}\
+//        label:after {	content: '';	position: absolute;	top: 2px;	left: 2px;	width: 20px;	height: 20px;	background: #fff;	border-radius: 20px;	transition: 0.3s;}\
+//        input:checked + label {	background: #4cda64;}\
+//        input:checked + label:after {left: calc(100% - 2px);transform:translateX(-100%);}\
+//      </style>\
+//      <script type=\"text/javascript\">\
+//        var configMessage = function(index) {\
+//          var url = \"/settingMessage?txtIndexMessage=\" + index;\
+//          window.location.href = url;\
+//        };\
+//        var saveMessage = function() {\
+//          var listCheckbox= document.getElementsByTagName('input');\
+//          var param = '/listMessage?';\
+//          for(var i = 0; i < listCheckbox.length; i++) {\
+//            if(listCheckbox[i].type=='checkbox') {\
+//              if (listCheckbox[i].checked == true) {\
+//                param += 'chboxStatus'+ i + '=true';\
+//              } else param += 'chboxStatus'+ i + '=false';\
+//              param += '&';\
+//            }\
+//          }\
+//          param += 'btnSaveList=true';\
+//          window.location.href = param;\
+//        };\
+//      </script>\
+//    </div>\
+//  </body>\
+//  </html>";
+//  return content;
+//}
+//String dropdownFonts(String font) {
+//  String s ="";
+//  s += "<select class=\"input\" name=\"txtFontMessage\">";
+//  for (int i = 0; i< 4; i++) {
+//    s += "<option value=\"" + Fonts[i] + "\" " + ((font == Fonts[i]) ? "selected" : "") + ">" + (Fonts[i]) + "</option>";
+//  }
+//  s += "</select>";
+//  return s;
+//}
+//
+//String dropdownMotions(String motion) {
+//
+//  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"}]";
+//  String s ="";
+//  s += "<select class=\"input\" onchange=\"onMotion(this);\" name=\"chboxMotionMessage\">";
+//  s += "<option value=\"stop\"" + String(motion.equals("stop") ? "selected" : "") + ">Không</option>";
+//  s += "<option value=\"left\"" + String(motion.equals("left") ? "selected" : "") + ">Trái qua phải</option>";
+//  s += "<option value=\"right\"" + String(motion.equals("right") ? "selected" : "") + ">Phải qua trái</option>";
+//  s += "<option value=\"up\"" + String(motion.equals("up") ? "selected" : "") + ">Trên xuống dưới</option>";
+//  s += "<option value=\"down\"" + String(motion.equals("down") ? "selected" : "") + ">Dưới lên trên</option>";
+//  s += "</select>";
+//  return s;
+//}
+//String SendListMessage()
+//{
+//  String s="";
+//  String json1 = "";
+//  int length = parsed["arr"].size();
+//  show("SendListMessage length:" + String(length));
+//  // for (int i = 0; i < length; i++) {
+//  //   JsonObject& itemOb = parsed["arr"][i];
+//  //   json1 = "";
+//  //   itemOb.printTo(json1);
+//  //   show(json1);
+//  // }
+//  for (int i = 0; i < length ;i++ ) {
+//    String id = String(i);
+//    JsonObject& item = parsed["arr"][i];  //Implicit cast
+//    const char * name = item["name"];
+//    // Serial.println(status == true ? "true" : "false");
+//    String status = (bool)item["status"] ==  true ? " checked " : "" ;
+//    s += "<div class=\"item-message\">\
+//    <div class=\"status-message\"><input type=\"checkbox\" name=\"chboxStatus" + id + "\"" + status + "id=\"switch" + id + "\" /><label for=\"switch" + id + "\"></label></div>\
+//    <div class=\"title-message\" onclick=\"configMessage(" + id +")\">" + name + "</div>\
+//    </div>";
+//  }
+//  //show(s);
+//  return s;
+//}
 void GiaTriThamSo()
 {
   t = millis();
@@ -1216,9 +1220,7 @@ void GiaTriThamSo()
         show("Set txtBaudMessage : " + Value);
       }
       else if (Name.indexOf("btnSaveMessage") >= 0){
-        if ( Value.indexOf("true") >= 0 ) {
-          isbtnSaveMessage = true;
-        }
+        isbtnSaveMessage = true;
       }
       else if (Name.indexOf("btnSaveSetting") >= 0)
       {
