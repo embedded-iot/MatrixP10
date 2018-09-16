@@ -194,6 +194,7 @@ void loop()
 { 
   
   ESP.wdtFeed();
+
   if (millis() - tWatchDog > 1000) {
     watchdogCount = 0;
     tWatchDog = millis();
@@ -296,6 +297,7 @@ void showMatrix() {
     } else {
       char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
       dmd.drawString(0,0, nameMessage, GRAPHICS_ON);
+      show("Show default message!");
       
     }
   }
@@ -318,19 +320,19 @@ void matrixSeting(JsonObject& message) {
   }
   String strName = message["name"];
   if (strName.length() > 0) {
-    // dmd.clearScreen(); // No clear screen when transfer next message.
+     dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
     show("stringWidth : " + String(strLengthMessage));
     int marginTop = message["top"];
     int marginLeft = message["left"];
-    dmd.drawString(marginTop, marginLeft, nameMessage, GRAPHICS_ON);
+    dmd.drawString(marginLeft, marginTop, nameMessage, GRAPHICS_ON);
     if (font.equals("Font_1")) {
       dmd.selectFont(Font_1);
     }
     int light = message["light"];
-    dmd.setBrightness(light);
+//    dmd.setBrightness(light);
     repeatMotion = message["repeat"];
     baudMotion = message["baud"];
     String motion = message["motion"];
@@ -1264,6 +1266,7 @@ void GiaTriThamSo()
     idWebSite = 0;
   }
   if (isbtnSaveSetting) {
+     dmd.setBrightness(lightMatrix);
      WriteConfig();
      show("Save config");
   } else if (isbtnSaveMessage) {
