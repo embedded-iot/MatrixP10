@@ -46,8 +46,10 @@ ESP8266WebServer server(80);
 // WiFiServer   ;
 
 
-#define RESET 3 
+#define RESET 0
 #define LED 2
+#define DIRECTION_PIN 3
+#define WIFI_PIN A0
 #define DEBUGGING true
 #define MODE_STATION false
 IPAddress staticIP(192, 168, 1, 100);
@@ -59,7 +61,7 @@ IPAddress subnet(255, 255, 255, 0);
 #define ADDR_APPASS (ADDR_APSSID+20)
 #define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
 #define ADDR_JSON_MESSAGE (ADDR_PASS_LOGIN + 20)
-#define ADDR_TIME_NEXT_MSG 480 // 4 byte
+#define ADDR_TIME_NEXT_MSG 504 // 4 byte
 #define ADDR_LIGHT_MATRIX ADDR_TIME_NEXT_MSG + 4 // 1 byte
 
 
@@ -93,7 +95,7 @@ long timeLogout = 120000;
 long timeNextMessage = 60000;
 long t, tNext, tMotion;
 
-// StaticJsonBuffer<512> JSONBuffer; //Memory pool
+// StaticJsonBuffer<1024> JSONBuffer; //Memory pool
 DynamicJsonBuffer JSONBuffer;
 JsonObject& parsed = JSONBuffer.createObject();
 // JsonArray& parsed["arr"] = JSONBuffer.createArray();
@@ -123,6 +125,13 @@ void ISRwatchdog() {
     ESP.reset();
   }
 }
+bool wifi = true;
+String pinDirection = "all";
+bool digitalDirection;
+
+char* nameMessage;
+int marginTop;
+int marginLeft;
 
 void setup()
 {
@@ -130,9 +139,19 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   BeginEEPROM();
+  SPIFFS.begin();
+    {
+      Dir dir = SPIFFS.openDir("/");
+      while (dir.next()) {
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        Serial.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
+      }
+      Serial.printf("\n");
+    }
   show("Start:" + String(ADDR_JSON_MESSAGE) + " Lenght:" + String(512 - ADDR_JSON_MESSAGE));
   Serial.println(ESP.getCpuFreqMHz());
-  GPIO();
+  GPIO(); 
   idWebSite = 0;
   isLogin = false;
   if (EEPROM.read(511) == EEPROM.read(0) || flagClear) {
@@ -150,21 +169,16 @@ void setup()
       show("Set WIFI_AP");
     }
   #else
+    if (analogRead(WIFI_PIN) > 500) {
       AccessPoint();
+    } else {
+      WiFi.mode(WIFI_OFF);
+      show("WIFI_OFF");
+    }
   #endif
 
-  SPIFFS.begin();
-    {
-      Dir dir = SPIFFS.openDir("/");
-      while (dir.next()) {
-        String fileName = dir.fileName();
-        size_t fileSize = dir.fileSize();
-        Serial.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
-      }
-      Serial.printf("\n");
-    }
   StartServer();
-  show("End Setup()");
+
   // String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
   // String JSONMessage = "[{'status':'true','name':'nguyen van quan','font':'Font 2','light':'40','motion':'left','baud':'400'}]";
   // char JSONMessage[] = "[{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"},{\"status\":\"true\",\"name\":\"nguyen van quan\",\"font\":\"Font 2\",\"light\":\"40\",\"motion\":\"left\",\"baud\":\"400\"}]";
@@ -177,12 +191,30 @@ void setup()
   //  clear/init the DMD pixels held in RAM
   dmd.clearScreen();   //true is normal (all pixels off), false is negative (all pixels on)
   dmd.selectFont(Font_1);
-  char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
+  nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
   dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
   refreshShowMessage();
-  secondTick.attach(5, ISRwatchdog);
-  ESP.wdtDisable();
-  ESP.wdtEnable(WDTO_8S);
+//  secondTick.attach(5, ISRwatchdog);
+//  ESP.wdtDisable();
+//  ESP.wdtEnable(WDTO_8S);
+//  delay(20000);
+//  if (wifi) {
+//    show("WIFI_OFF");
+//    wifi = false;
+////    WiFi.softAPdisconnect(false);
+//    WiFi.enableAP(false);
+//  }
+  show("End Setup()");
+  // removeFIle("/message.json");
+  // writeFile("/message.json", "123123123");
+  // String s = readFile("/test.txt");
+  // if (SPIFFS.exists("/test.txt")) {
+  //   show("exists file");
+  // } else {
+  //   show("not Found file");
+  // }
+  // show(s);
+
 }
 long tCheckClient;
 int listClient;
@@ -190,22 +222,23 @@ int tWatchDog;
 long countRepeat;
 long tRepeat = 0;
 long strLengthMessage = 0;
+
 void loop()
 { 
-  
-  ESP.wdtFeed();
 
-  if (millis() - tWatchDog > 1000) {
-    watchdogCount = 0;
-    tWatchDog = millis();
-  }
-  if (listClient > 0) {
-    server.handleClient();
-  }
+//  if (millis() - tWatchDog > 1000) {
+//    watchdogCount = 0;
+//    tWatchDog = millis();
+//  }
+
   #if MODE_STATION 
     server.handleClient();
     return;
   #endif
+
+  if (listClient > 0) {
+    server.handleClient();
+  }
 
   if (millis() - tCheckClient > 2000) {
     if (listClient != WiFi.softAPgetStationNum()) {
@@ -226,7 +259,7 @@ void loop()
     isLogin = false;
     t = millis();
   }
-  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >=  (repeatMotion * strLengthMessage)) {
+  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >= (currentMotion.equals("blink") ? (2 * repeatMotion) : (repeatMotion * strLengthMessage))) {
     showMatrix();
     countRepeat = 0;
   }
@@ -246,9 +279,8 @@ void loop()
     }
     if (t < 0){
       show("RESET DEFAULT CONFIG");
-      ConfigDefault();
-      WriteConfig();
-      setup();
+      ClearEEPROM();
+      while (digitalRead(RESET)==LOW){}
     }
   }
   // delay(1);
@@ -269,8 +301,13 @@ void onMotion() {
     dmd.marqueeScrollY(1);
   } else if (currentMotion.equals("bottom")) {
     dmd.marqueeScrollY(-1);
-  } else {
-    
+  } else if (currentMotion.equals("blink")) {
+    if (countRepeat % 2 == 1) {
+      dmd.drawString(marginLeft, marginTop, nameMessage, GRAPHICS_ON);
+    } else {
+      // dmd.drawString(marginLeft, marginTop, "                 ", GRAPHICS_ON);
+      dmd.clearScreen();
+    }
   }
 }
 void showMatrix() {
@@ -295,7 +332,7 @@ void showMatrix() {
         showCurrentIndex = 0;
       }
     } else {
-      char* nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
+      nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
       dmd.drawString(0,0, nameMessage, GRAPHICS_ON);
       show("Show default message!");
       
@@ -322,11 +359,11 @@ void matrixSeting(JsonObject& message) {
   if (strName.length() > 0) {
      dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
-    char* nameMessage = dmd.ConvertStringToArrayChar(strName, false);
+    nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
     show("stringWidth : " + String(strLengthMessage));
-    int marginTop = message["top"];
-    int marginLeft = message["left"];
+    marginTop = message["top"];
+    marginLeft = message["left"];
     dmd.drawString(marginLeft, marginTop, nameMessage, GRAPHICS_ON);
     if (font.equals("Font_1")) {
       dmd.selectFont(Font_1);
@@ -415,26 +452,84 @@ bool handleFileRead(String path) {
   }
   return false;
 }
+String readFile(String fileName) {
+  File f = SPIFFS.open(fileName, "r");
+  String s = "";
+  if (!f) {
+    show("File doesn't exist yet. Creating it");
+
+    // open the file in write mode
+    File f = SPIFFS.open(fileName, "w");
+    if (!f) {
+      show("file creation failed");
+    }
+    else {
+      f.println("");
+    }
+  }
+  // we could open the file
+  s += f.readStringUntil('\n');
+  f.close();
+  return s;
+}
+bool writeFile(String fileName, String data) {
+  if (!SPIFFS.exists(fileName)) {
+    show("File doesn't exist yet. Creating it");
+    // open the file in write mode
+    File f = SPIFFS.open(fileName, "w");
+    if (!f) {
+      show("file creation failed");
+      return false;
+    }
+    f.close();
+  }   
+  File f = SPIFFS.open(fileName, "r");
+  f.println(data);
+  f.close();
+  return true;
+}
+void removeFIle(String path) {
+  if (SPIFFS.remove(path)) {
+    show("Remove file "+ path);
+  } else {
+    show("Not exists " + path);
+  }
+  
+}
 void GPIO()
 {
   show("GPIO");
   pinMode(LED,OUTPUT);
-  digitalWrite(LED,LOW);
+  digitalWrite(LED, HIGH);
   pinMode(RESET,INPUT_PULLUP);
-  // attachInterrupt(digitalPinToInterrupt(VT), handleInterruptVT, RISING); 
+  pinMode(DIRECTION_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(DIRECTION_PIN), handleInterruptVT, CHANGE);
+  setDirection(digitalRead(DIRECTION_PIN));
 }
 
-int flagInterrupt;
+bool flagInterrupt;
 //This program get executed when interrupt is occures i.e.change of input state
 void handleInterruptVT() { 
   if (flagInterrupt) 
     return;
   flagInterrupt = true;
-  // To do:
-
+  if (digitalRead(DIRECTION_PIN) != digitalDirection) {
+     setDirection(digitalRead(DIRECTION_PIN));
+     refreshShowMessage();
+  }
+  
   flagInterrupt = false;
 }
 
+void setDirection(bool dir) {
+  digitalDirection = dir;
+  if (dir) {
+      pinDirection = "prev";
+  } else {
+    pinDirection = "next";
+  }
+  show("pinDirection:" + pinDirection);
+}
 void delayMs(int x)   {
   for(int i=0; i<=x; i++) {
     delayMicroseconds(1000);
@@ -460,6 +555,9 @@ void initialJson(String strJson) {
   JsonObject& parsed1 = JSONBuffer.parseObject(strJson);   //Parse message
   if (!parsed1.success()) {      //Check for errors in parsing
     show("Parsing failed");
+//    ClearEEPROM();
+//    ConfigDefault();
+//    WriteConfig();
   }
   parsed["arr"] = parsed1["arr"];
 }
@@ -497,10 +595,12 @@ JsonArray& listMessageActiveStatus() {
   // StaticJsonBuffer<1024> JSONBuffer1; 
   JsonArray& tg = JSONBuffer.createArray();
   int len = parsed["arr"].size();
+  
   for (int i = 0; i < len; i++) {
     JsonObject& item = parsed["arr"][i];
     bool status = item["status"];
-    if (!!status) {
+    String dir = item["dir"];
+    if (!!status && (pinDirection.equals(dir) || dir.equals("all")) ) {
       tg.add(item);
     }
   }
@@ -527,26 +627,46 @@ void WriteConfig()
   parsed.printTo(JSONMessage);
   SaveStringToEEPROM(JSONMessage, ADDR_JSON_MESSAGE);
   SaveLongToEEPROM(timeNextMessage, ADDR_TIME_NEXT_MSG);
-  SaveCharToEEPROM(lightMatrix, LIGHT_MATRIX_DEFAULT);
+  SaveCharToEEPROM(lightMatrix, ADDR_LIGHT_MATRIX);
   show("Write Config");
+//  getJSONFromEEPROM();
 }
 void ReadConfig()
 {
   apSSID = ReadStringFromEEPROM(ADDR_APSSID);
   apPASS = ReadStringFromEEPROM(ADDR_APPASS);
   passLogin = ReadStringFromEEPROM(ADDR_PASS_LOGIN);
-  String JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
   timeNextMessage = ReadLongFromEEPROM(ADDR_TIME_NEXT_MSG);
   lightMatrix = ReadCharFromEEPROM(LIGHT_MATRIX_DEFAULT);
   show("Read Config");
   show("Access Point: \n" + apSSID + "\n" + apPASS);
   show("Pass login: \n" + passLogin);
-  show("Json Message: \n" + String(JSONMessage.length()));
   show("Time next message: \n" + String(timeNextMessage));
   show("Light matrix:\n" + String(lightMatrix));
-  initialJson(JSONMessage);
+  getJSONFromEEPROM();
 }
 
+void getJSONFromEEPROM() {
+  String JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
+  show("Json Message: \n" + String(JSONMessage.length()));
+  initialJson(JSONMessage);
+  show(JSONMessage);
+}
+
+void WiFiOn() {
+    WiFi.mode(WIFI_AP);
+    AccessPoint();
+}
+
+
+void WiFiOff() {
+    //Serial.println("diconnecting client and wifi");
+    //client.disconnect();
+      WiFi.forceSleepBegin();
+  WiFi.mode(WIFI_OFF);
+//  WiFi.softAPdisconnect(true);
+  delay(1);
+}
 void AccessPoint()
 {
   show("Access Point Config");
@@ -630,9 +750,11 @@ void getSettings() {
     }
   }
   strfonts += "]";
-  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"}]";
+  String strDirections = "[{\"name\":\"Chiều đi\", \"value\": \"next\"},{\"name\":\"Chiều về\", \"value\":\"prev\"},{\"name\":\"Tất cả\", \"value\":\"all\"}]";
+  String motions = "[{\"name\":\"Không\", \"value\":\"stop\"},{\"name\":\"Trái qua phải\", \"value\":\"left\"},{\"name\":\"Phải qua trái\", \"value\":\"right\"},{\"name\":\"Trên xuống dưới\", \"value\":\"up\"},{\"name\":\"Dưới lên trên\", \"value\":\"down\"},{\"name\":\"Nhấp nháy\", \"value\":\"blink\"}]";
   String json = "{\"txtFonts\":" + strfonts + ",\
                   \"txtMotions\":" + motions + ",\
+                  \"txtDirections\":" + strDirections + ",\
                   \"txtMinBaud\":" + String(50) + ",\
                   \"txtMaxBaud\":" + String(1000) + "}";
   show(json);
@@ -682,6 +804,7 @@ void createMessage() {
               \"txtNameMessage\": \"New message\",\
               \"txtFontMessage\":\"" + Fonts[0] + "\",\
               \"chboxMotionMessage\":\"stop\",\
+              \"txtDirectionMessage\": \"prev\",\
               \"txtMarginTopMessage\":" + String(0) + ",\
               \"txtMarginLeftMessage\":" + String(0) + ",\
               \"txtRepeatMessage\":" + String(1) + ",\
@@ -1195,6 +1318,10 @@ void GiaTriThamSo()
         object["font"] = Value;
         show("Set txtFontMessage : " + Value);
       }
+      else if (Name.indexOf("txtDirectionMessage") >= 0){
+        object["dir"] = Value;
+        show("Set txtDirectionMessage : " + Value);
+      }
       else if (Name.indexOf("txtLightMessage") >= 0){
         if (Value.equals(String(lightMatrix)) == false) {
           lightMatrix = Value.toInt();
@@ -1272,8 +1399,8 @@ void GiaTriThamSo()
   } else if (isbtnSaveMessage) {
     show("Set btnSaveMessage: true");
     String strJson = "";
-    // object.printTo(strJson);
-    // show(strJson);
+//     object.printTo(strJson);
+//     show("object:" + strJson);
     JsonArray& array1 = parsed["arr"];
     bool isEdit = currentIndex < lengthMessage;
     if (isEdit) {
@@ -1281,10 +1408,16 @@ void GiaTriThamSo()
       array1[currentIndex] = object;
       show("Edit message");
     } else {
-      array1.add(object);
-      show("Add message");
+      if (array1.add(object)) {
+        show("Add message success!");
+      } else {
+        show("Add message fail!");
+      }
+      parsed["arr"].printTo(strJson);
+      show("arr:" + strJson);
     }
-    parsed.printTo(strJson);
+//    show("object:" + strJson);
+//    parsed.printTo(strJson);
     // show(strJson);
     if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
       array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
