@@ -62,7 +62,7 @@ IPAddress subnet(255, 255, 255, 0);
 #define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
 #define ADDR_JSON_MESSAGE (ADDR_PASS_LOGIN + 20)
 #define ADDR_TIME_NEXT_MSG 504 // 4 byte
-#define ADDR_LIGHT_MATRIX ADDR_TIME_NEXT_MSG + 4 // 1 byte
+#define ADDR_LIGHT_MATRIX 510 // 1 byte
 
 
 #define NAME_DEFAULT "MBELL"
@@ -259,16 +259,19 @@ void loop()
     isLogin = false;
     t = millis();
   }
-  if (listClient == 0 && lengthMessageActive > 1 && countRepeat >= (currentMotion.equals("blink") ? (2 * repeatMotion) : (repeatMotion * strLengthMessage))) {
-    showMatrix();
-    countRepeat = 0;
-  }
+  
   if (listClient == 0 && lengthMessageActive > 0) {
     if (millis() - tMotion > baudMotion) {
-      onMotion();
       countRepeat++;
-      show("countRepeat:" + String(countRepeat));
+      if (lengthMessageActive > 1 && countRepeat > (currentMotion.equals("blink") ? (2 * repeatMotion) : (repeatMotion * strLengthMessage))) {
+        showMatrix();
+        countRepeat = 1;
+      }else {
+        onMotion();
+       }
+       show("countRepeat:" + String(countRepeat));
       tMotion = millis();
+      
     }
   }
   if (digitalRead(RESET) == LOW)
@@ -357,7 +360,7 @@ void matrixSeting(JsonObject& message) {
   }
   String strName = message["name"];
   if (strName.length() > 0) {
-     dmd.clearScreen(); // No clear screen when transfer next message.
+//     dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
