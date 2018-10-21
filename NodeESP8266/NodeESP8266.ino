@@ -21,6 +21,7 @@
 #include <ESP8266WebServer.h>
 #include <WiFiServer.h>
 #include <WiFiUdp.h>
+#include <DNSServer.h>
 // #include <WiFi.h>
 #include "eeprom.h"
 #include <ArduinoJson.h>
@@ -52,9 +53,19 @@ ESP8266WebServer server(80);
 #define WIFI_PIN A0
 #define DEBUGGING true
 #define MODE_STATION false
+#define SPIFFS_MODE true
+
+#define DataFile "/data.json"
+
+
 IPAddress staticIP(192, 168, 1, 100);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
+
+
+const byte DNS_PORT = 53;
+IPAddress apIP(192, 168, 4, 1);
+DNSServer dnsServer;
 
 #define ADDR 0
 #define ADDR_APSSID ADDR
@@ -118,10 +129,10 @@ void ISRwatchdog() {
   watchdogCount++;
   // Serial.println("Ticker!" + String(watchdogCount));
   if ( watchdogCount >= 2 ) {
-     // Only print to serial when debugging
+    // Only print to serial when debugging
     Serial.println("The dog bites!");
-//     ESP.reset();
-        // ESP.restart();
+    //     ESP.reset();
+    // ESP.restart();
     ESP.reset();
   }
 }
@@ -139,19 +150,19 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   BeginEEPROM();
-  SPIFFS.begin();
-    {
-      Dir dir = SPIFFS.openDir("/");
-      while (dir.next()) {
-        String fileName = dir.fileName();
-        size_t fileSize = dir.fileSize();
-        Serial.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
-      }
-      Serial.printf("\n");
+  if (SPIFFS.begin())
+  {
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next()) {
+      String fileName = dir.fileName();
+      size_t fileSize = dir.fileSize();
+      Serial.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
     }
+    Serial.printf("\n");
+  }
   show("Start:" + String(ADDR_JSON_MESSAGE) + " Lenght:" + String(512 - ADDR_JSON_MESSAGE));
   Serial.println(ESP.getCpuFreqMHz());
-  GPIO(); 
+  GPIO();
   idWebSite = 0;
   isLogin = false;
   if (EEPROM.read(511) == EEPROM.read(0) || flagClear) {
@@ -160,23 +171,24 @@ void setup()
     WriteConfig();
   }
   ReadConfig();
-  #if MODE_STATION 
-    WiFi.mode(WIFI_AP_STA);
-    ConfigNetwork();
-    ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000); 
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.mode(WIFI_AP);
-      show("Set WIFI_AP");
-    }
-  #else
-    if (analogRead(WIFI_PIN) > 500) {
-      AccessPoint();
-    } else {
-      WiFi.mode(WIFI_OFF);
-      show("WIFI_OFF");
-    }
-  #endif
-
+#if MODE_STATION
+  WiFi.mode(WIFI_AP_STA);
+  ConfigNetwork();
+  ConnectWifi(STA_SSID_DEFAULT, STA_PASS_DEFAULT, 15000);
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.mode(WIFI_AP);
+    show("Set WIFI_AP");
+  }
+#else
+  if (analogRead(WIFI_PIN) > 500) {
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+    AccessPoint();
+  } else {
+    WiFi.mode(WIFI_OFF);
+    show("WIFI_OFF");
+  }
+#endif
   StartServer();
 
   // String JSONMessage = "{'arr':[{status:true,name:'nguyen ',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyensd  quan',font:'Font 2',light:40,motion:'left',baud:400},{status:true,name:'nguyen 4234234 quan',font:'Font 2',light:40,motion:'left',baud:400}]}";
@@ -192,28 +204,19 @@ void setup()
   dmd.clearScreen();   //true is normal (all pixels off), false is negative (all pixels on)
   dmd.selectFont(Font_1);
   nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
-  dmd.drawString(0,0, nameMessage, GRAPHICS_ON); 
+  dmd.drawString(0,0, nameMessage, GRAPHICS_ON);
   refreshShowMessage();
-//  secondTick.attach(5, ISRwatchdog);
-//  ESP.wdtDisable();
-//  ESP.wdtEnable(WDTO_8S);
-//  delay(20000);
-//  if (wifi) {
-//    show("WIFI_OFF");
-//    wifi = false;
-////    WiFi.softAPdisconnect(false);
-//    WiFi.enableAP(false);
-//  }
+  //  secondTick.attach(5, ISRwatchdog);
+  //  ESP.wdtDisable();
+  //  ESP.wdtEnable(WDTO_8S);
+  //  delay(20000);
+  //  if (wifi) {
+  //    show("WIFI_OFF");
+  //    wifi = false;
+  ////    WiFi.softAPdisconnect(false);
+  //    WiFi.enableAP(false);
+  //  }
   show("End Setup()");
-  // removeFIle("/message.json");
-  // writeFile("/message.json", "123123123");
-  // String s = readFile("/test.txt");
-  // if (SPIFFS.exists("/test.txt")) {
-  //   show("exists file");
-  // } else {
-  //   show("not Found file");
-  // }
-  // show(s);
 
 }
 long tCheckClient;
@@ -224,14 +227,16 @@ long tRepeat = 0;
 long strLengthMessage = 0;
 
 void loop()
-{ 
+{
 
-//  if (millis() - tWatchDog > 1000) {
-//    watchdogCount = 0;
-//    tWatchDog = millis();
-//  }
+  //  if (millis() - tWatchDog > 1000) {
+  //    watchdogCount = 0;
+  //    tWatchDog = millis();
+  //  }
 
-  #if MODE_STATION 
+  dnsServer.processNextRequest();
+
+  #if MODE_STATION
     server.handleClient();
     return;
   #endif
@@ -259,7 +264,7 @@ void loop()
     isLogin = false;
     t = millis();
   }
-  
+
   if (listClient == 0 && lengthMessageActive > 0) {
     if (millis() - tMotion > baudMotion) {
       countRepeat++;
@@ -268,10 +273,10 @@ void loop()
         countRepeat = 1;
       }else {
         onMotion();
-       }
-       show("countRepeat:" + String(countRepeat));
+      }
+      show("countRepeat:" + String(countRepeat));
       tMotion = millis();
-      
+
     }
   }
   if (digitalRead(RESET) == LOW)
@@ -281,9 +286,10 @@ void loop()
       delay(100);
     }
     if (t < 0){
-      show("RESET DEFAULT CONFIG");
+      show("RESET MODE");
+      while (digitalRead(RESET) == LOW){delay(100);}
       ClearEEPROM();
-      while (digitalRead(RESET)==LOW){}
+      setup();
     }
   }
   // delay(1);
@@ -291,7 +297,7 @@ void loop()
 
 void show(String s)
 {
-  #ifdef DEBUGGING 
+  #ifdef DEBUGGING
     Serial.println(s);
   #endif
 }
@@ -317,7 +323,7 @@ void showMatrix() {
   int lengthMessage = getLengthMessage();
   if (lengthMessage > 0) {
     JsonArray& arrayMessageActive = listMessageActiveStatus();
-    lengthMessageActive = arrayMessageActive.size(); 
+    lengthMessageActive = arrayMessageActive.size();
     // show("MessageActiveStatus: " + String(lengthMessageActive));
     if (lengthMessageActive > 0) {
       String stg = "";
@@ -338,7 +344,7 @@ void showMatrix() {
       nameMessage = dmd.ConvertStringToArrayChar(startMsg, false);
       dmd.drawString(0,0, nameMessage, GRAPHICS_ON);
       show("Show default message!");
-      
+
     }
   }
 }
@@ -360,7 +366,7 @@ void matrixSeting(JsonObject& message) {
   }
   String strName = message["name"];
   if (strName.length() > 0) {
-//     dmd.clearScreen(); // No clear screen when transfer next message.
+    //     dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
@@ -378,13 +384,11 @@ void matrixSeting(JsonObject& message) {
     String motion = message["motion"];
     currentMotion = motion;
   }
-  
- 
 }
 char* string2char(String command){
   char *szBuffer = new char[command.length()+1];
      strcpy(szBuffer,command.c_str( ));
-  return szBuffer; 
+  return szBuffer;
 }
 
 void blinkLed(int numberRepeat, long tdelay) {
@@ -439,6 +443,9 @@ String getContentType(String filename) {
 }
 bool handleFileRead(String path) {
   show("handleFileRead: " + path);
+  if (captivePortal()) { // If caprive portal redirect instead of displaying the page.
+    return false;
+  }
   if (path.endsWith("/")) {
     path += "index.html";
   }
@@ -455,49 +462,49 @@ bool handleFileRead(String path) {
   }
   return false;
 }
-String readFile(String fileName) {
-  File f = SPIFFS.open(fileName, "r");
-  String s = "";
-  if (!f) {
-    show("File doesn't exist yet. Creating it");
 
-    // open the file in write mode
-    File f = SPIFFS.open(fileName, "w");
-    if (!f) {
-      show("file creation failed");
-    }
-    else {
-      f.println("");
-    }
+/** Redirect to captive portal if we got a request for another domain. Return true in that case so the page handler do not try to handle the request again. */
+boolean captivePortal() {
+  Serial.println(server.hostHeader());
+  if (server.hostHeader() != "192.168.4.1") {
+    Serial.print("Request redirected to captive portal");
+    server.sendHeader("Location", String("http://192.168.4.1/"), true);
+    server.send(302, "text/plain", "");   // Empty content inhibits Content-length header so we have to close the socket ourselves.
+    server.client().stop(); // Stop is needed because we sent no content length
+    return true;
   }
-  // we could open the file
-  s += f.readStringUntil('\n');
-  f.close();
-  return s;
+  return false;
 }
-bool writeFile(String fileName, String data) {
-  if (!SPIFFS.exists(fileName)) {
-    show("File doesn't exist yet. Creating it");
-    // open the file in write mode
-    File f = SPIFFS.open(fileName, "w");
-    if (!f) {
-      show("file creation failed");
-      return false;
+String readFile(String fileName) {
+  // we could open the file
+  File f = SPIFFS.open(fileName, "r");
+  String content = "";
+  if (f) {
+    while (f.available()) {
+      content += f.readStringUntil('\n');
     }
     f.close();
-  }   
-  File f = SPIFFS.open(fileName, "r");
-  f.println(data);
-  f.close();
-  return true;
+  }
+  return content;
 }
-void removeFIle(String path) {
+bool writeFile(String fileName, String modeFile, String content) {
+  File f = SPIFFS.open(fileName.c_str(), modeFile.c_str());
+  if (f) {
+    //Write data to file
+    Serial.println("Open file!");
+    f.println(content);
+    f.close();  //Close file
+    return true;
+  }
+  return false;
+}
+void removeFile(String path) {
   if (SPIFFS.remove(path)) {
     show("Remove file "+ path);
   } else {
     show("Not exists " + path);
   }
-  
+
 }
 void GPIO()
 {
@@ -512,15 +519,15 @@ void GPIO()
 
 bool flagInterrupt;
 //This program get executed when interrupt is occures i.e.change of input state
-void handleInterruptVT() { 
-  if (flagInterrupt) 
+void handleInterruptVT() {
+  if (flagInterrupt)
     return;
   flagInterrupt = true;
   if (digitalRead(DIRECTION_PIN) != digitalDirection) {
      setDirection(digitalRead(DIRECTION_PIN));
      refreshShowMessage();
   }
-  
+
   flagInterrupt = false;
 }
 
@@ -595,10 +602,10 @@ JsonObject& getMessageByIndex(int index) {
 JsonArray& listMessageActiveStatus() {
   // JSONBuffer.clear();
   // DynamicJsonBuffer JSONBuffer1;
-  // StaticJsonBuffer<1024> JSONBuffer1; 
+  // StaticJsonBuffer<1024> JSONBuffer1;
   JsonArray& tg = JSONBuffer.createArray();
   int len = parsed["arr"].size();
-  
+
   for (int i = 0; i < len; i++) {
     JsonObject& item = parsed["arr"][i];
     bool status = item["status"];
@@ -628,7 +635,13 @@ void WriteConfig()
   SaveStringToEEPROM(passLogin, ADDR_PASS_LOGIN);
   String JSONMessage = "";
   parsed.printTo(JSONMessage);
-  SaveStringToEEPROM(JSONMessage, ADDR_JSON_MESSAGE);
+
+  #if SPIFFS_MODE
+    writeFile(DataFile, "w", JSONMessage);
+  #else 
+    SaveStringToEEPROM(JSONMessage, ADDR_JSON_MESSAGE);
+  #endif
+  
   SaveLongToEEPROM(timeNextMessage, ADDR_TIME_NEXT_MSG);
   SaveCharToEEPROM(lightMatrix, ADDR_LIGHT_MATRIX);
   show("Write Config");
@@ -650,15 +663,20 @@ void ReadConfig()
 }
 
 void getJSONFromEEPROM() {
-  String JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
+  String JSONMessage = "";
+  #if SPIFFS_MODE 
+    JSONMessage = readFile(DataFile);
+  #else 
+    JSONMessage = ReadStringFromEEPROM(ADDR_JSON_MESSAGE);
+  #endif
   show("Json Message: \n" + String(JSONMessage.length()));
-  initialJson(JSONMessage);
   show(JSONMessage);
+  initialJson(JSONMessage);
 }
 
 void WiFiOn() {
-    WiFi.mode(WIFI_AP);
-    AccessPoint();
+  WiFi.mode(WIFI_AP);
+  AccessPoint();
 }
 
 
@@ -676,10 +694,10 @@ void AccessPoint()
   //WiFi.disconnect();
   delay(1000);
   // Wait for connection
-  show( WiFi.softAP(apSSID.c_str(),apPASS.c_str()) ? "Ready" : "Failed!");
+  show( WiFi.softAP(apSSID.c_str(), apPASS.c_str()) ? "Ready" : "Failed!");
   IPAddress myIP = WiFi.softAPIP();
   show("AP IP address: ");
-  SoftIP = ""+(String)myIP[0] + "." + (String)myIP[1] + "." +(String)myIP[2] + "." +(String)myIP[3];
+  SoftIP = "" + (String)myIP[0] + "." + (String)myIP[1] + "." + (String)myIP[2] + "." + (String)myIP[3];
   show(SoftIP);
 }
 
@@ -690,18 +708,18 @@ void ConnectWifi(String ssid, String password, long timeOut)
   int count = timeOut / 500;
   show("Connecting");
   show(ssid + "-" + password);
-  WiFi.begin(ssid.c_str(),password.c_str());
+  WiFi.begin(ssid.c_str(), password.c_str());
   while (WiFi.status() != WL_CONNECTED && --count > 0) {
     delay(500);
     Serial.print(".");
   }
-  if (count > 0){
+  if (count > 0) {
     show("Connected");
     IPAddress myIP = WiFi.localIP();
-    String LocalIP = ""+(String)myIP[0] + "." + (String)myIP[1] + "." +(String)myIP[2] + "." +(String)myIP[3];
-    show("Local IP :"); 
+    String LocalIP = "" + (String)myIP[0] + "." + (String)myIP[1] + "." + (String)myIP[2] + "." + (String)myIP[3];
+    show("Local IP :");
     show(LocalIP);
-  }else {
+  } else {
     show("Disconnect");
   }
 }
@@ -712,14 +730,9 @@ void ConfigNetwork(){
 }
 void StartServer()
 {
-//  server.serveStatic("/js", SPIFFS, "/js");
-//  server.serveStatic("/css", SPIFFS, "/css");
-//  server.serveStatic("/fonts", SPIFFS, "/fonts");
-//  server.serveStatic("/img", SPIFFS, "/img");
-//  server.serveStatic("/resources", SPIFFS, "/resources");
-//  server.serveStatic("/lib", SPIFFS, "/lib");
-//  server.serveStatic("/", SPIFFS, "/index.html");
-
+  // if DNSServer is started with "*" for domain name, it will reply with
+  // provided IP to all DNS request
+  dnsServer.start(DNS_PORT, "*", apIP);
 
   server.on("/login", login);
   server.on("/isLogin", checkLogin);
@@ -732,7 +745,7 @@ void StartServer()
   server.on("/restart", restartDevice);
   server.on("/verifyDelete", verifyDeleteMessage);
   server.on("/updateStatus", updateStatus);
-//  server.onNotFound(handleNotFound);
+  //  server.onNotFound(handleNotFound);
   //called when the url is not defined here
   //use it to load content from SPIFFS
   server.onNotFound([]() {
@@ -742,6 +755,7 @@ void StartServer()
   });
   server.begin();
   show("HTTP server started");
+  
 }
 
 void getSettings() {
@@ -749,7 +763,7 @@ void getSettings() {
   for (int i = 0; i < FONT_SIZE; i++) {
     strfonts += "\"" + Fonts[i] + "\"";
     if (i < FONT_SIZE - 1) {
-       strfonts += ",";
+      strfonts += ",";
     }
   }
   strfonts += "]";
@@ -1009,7 +1023,7 @@ void updateStatus() {
 //  long baud = minBaud;
 //  long minRepeat = 1, maxRepeat = 5000;
 //  long repeat = minRepeat;
-//  
+//
 //  if (isEdit) {
 //    JsonObject& item = parsed["arr"][currentIndex];  //Implicit cast
 //    name = item["name"];
@@ -1221,9 +1235,9 @@ void updateStatus() {
 void GiaTriThamSo()
 {
   t = millis();
-  String message="";
+  String message = "";
   message += "\nMethod: ";
-  message += (server.method() == HTTP_GET)?"GET":"POST";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
   message += "\nArguments: ";
   message += server.args();
   message += "\n";
@@ -1232,39 +1246,39 @@ void GiaTriThamSo()
   int lengthMessage = parsed["arr"].size();
   JsonObject &object = JSONBuffer.createObject();
   bool isbtnSaveSetting = false, isbtnSaveMessage = false, istxtVerifyDelete = false, isbtnSaveList = false;
-  for (uint8_t i=0; i<server.args(); i++){
-     
-    String Name=server.argName(i); 
-    String Value=String(server.arg(i)) ;
-    String s1= Name+ ": " +Value;
+  for (uint8_t i = 0; i < server.args(); i++) {
+
+    String Name = server.argName(i);
+    String Value = String(server.arg(i)) ;
+    String s1 = Name + ": " + Value;
     show("--" + s1);
     if (isLogin == true) {
-      if (Name.indexOf("txtLogout") >= 0){
+      if (Name.indexOf("txtLogout") >= 0) {
         isLogin = false;
         show("Logout");
       }
-      else if (Name.indexOf("txtBack") >= 0){
+      else if (Name.indexOf("txtBack") >= 0) {
         idWebSite = 1;
         show("Back");
       }
-      else if (Name.indexOf("txtAPName") >= 0){
-        if (Value != staSSID && Value != apSSID && Value.length() > 0){
+      else if (Name.indexOf("txtAPName") >= 0) {
+        if (Value != staSSID && Value != apSSID && Value.length() > 0) {
           apSSID = Value;
           show("Set apSSID : " + Value);
         }
       }
-      else if (Name.indexOf("txtAPPass") >= 0){
-        if (Value != apPASS){
-          if (Value.length() >= 8) { // Length password >= 8 
+      else if (Name.indexOf("txtAPPass") >= 0) {
+        if (Value != apPASS) {
+          if (Value.length() >= 8) { // Length password >= 8
             apPASS =  Value ;
             show("Set apPASS : " + apPASS);
           } else {
             show("txtAPPass is invalid (Value.length() >= 8 && Value != apPASS)");
           }
-        } 
+        }
       }
-      else if (Name.indexOf("txtPassLogin") >= 0){
-        if (Value != passLogin){
+      else if (Name.indexOf("txtPassLogin") >= 0) {
+        if (Value != passLogin) {
           passLogin = Value;
           show("Set passLogin : " + Value);
         }
@@ -1272,7 +1286,7 @@ void GiaTriThamSo()
       else if (Name.indexOf("txtTimeNextMsg") >= 0){
         if (Value.equals(String(timeNextMessage)) == false) {
           timeNextMessage = atol(Value.c_str());
-          show("Set timeNextMessage : " + timeNextMessage); 
+          show("Set timeNextMessage : " + timeNextMessage);
         }
       }
       else if (Name.indexOf("txtRestart") >= 0){
@@ -1309,49 +1323,49 @@ void GiaTriThamSo()
         show("Set chboxStatus " + String(currentIndex) + " :" + Value);
         UpdateMessage(currentIndex, "status", status);
       }
-      else if (Name.indexOf("chboxStatusMessage") >= 0){
+      else if (Name.indexOf("chboxStatusMessage") >= 0) {
         object["status"] = ( Value.equals("true") ? true : false);
         show("Set chboxStatusMessage : " + Value);
       }
-      else if (Name.indexOf("txtNameMessage") >= 0){
+      else if (Name.indexOf("txtNameMessage") >= 0) {
         object["name"] = Value;
         show("Set txtNameMessage : " + Value);
       }
-      else if (Name.indexOf("txtFontMessage") >= 0){
+      else if (Name.indexOf("txtFontMessage") >= 0) {
         object["font"] = Value;
         show("Set txtFontMessage : " + Value);
       }
-      else if (Name.indexOf("txtDirectionMessage") >= 0){
+      else if (Name.indexOf("txtDirectionMessage") >= 0) {
         object["dir"] = Value;
         show("Set txtDirectionMessage : " + Value);
       }
-      else if (Name.indexOf("txtLightMessage") >= 0){
+      else if (Name.indexOf("txtLightMessage") >= 0) {
         if (Value.equals(String(lightMatrix)) == false) {
           lightMatrix = Value.toInt();
           show("Set lightMatrix : " + Value);
         }
       }
-      else if (Name.indexOf("chboxMotionMessage") >= 0){
+      else if (Name.indexOf("chboxMotionMessage") >= 0) {
         object["motion"] = Value;
         show("Set chboxMotionMessage : " + Value);
-      }      
-      else if (Name.indexOf("txtRepeatMessage") >= 0){
+      }
+      else if (Name.indexOf("txtRepeatMessage") >= 0) {
         object["repeat"] = Value.toInt();
         show("Set txtRepeatMessage : " + Value);
       }
-      else if (Name.indexOf("txtMarginTopMessage") >= 0){
+      else if (Name.indexOf("txtMarginTopMessage") >= 0) {
         object["top"] = Value.toInt();
         show("Set txtMarginTopMessage : " + Value);
       }
-      else if (Name.indexOf("txtMarginLeftMessage") >= 0){
+      else if (Name.indexOf("txtMarginLeftMessage") >= 0) {
         object["left"] = Value.toInt();
         show("Set txtMarginLeftMessage : " + Value);
       }
-      else if (Name.indexOf("txtBaudMessage") >= 0){
+      else if (Name.indexOf("txtBaudMessage") >= 0) {
         object["baud"] = Value.toInt();
         show("Set txtBaudMessage : " + Value);
       }
-      else if (Name.indexOf("btnSaveMessage") >= 0){
+      else if (Name.indexOf("btnSaveMessage") >= 0) {
         isbtnSaveMessage = true;
       }
       else if (Name.indexOf("btnSaveSetting") >= 0)
@@ -1366,12 +1380,12 @@ void GiaTriThamSo()
           setup();
         }
       }
-      else if (Name.indexOf("btnSaveList") >= 0){
+      else if (Name.indexOf("btnSaveList") >= 0) {
         if ( Value.indexOf("true") >= 0 ) {
           isbtnSaveList = true;
         }
       }
-      
+
     } else {
       if (Name.indexOf("txtUsername") >= 0) {
         UserName =  Value ;
@@ -1382,7 +1396,7 @@ void GiaTriThamSo()
         show("Set Password : " + PassWord);
       }
 
-      if (UserName.equals(apSSID) && PassWord.equals(passLogin)){
+      if (UserName.equals(apSSID) && PassWord.equals(passLogin)) {
         isLogin = true;
         show("Login == true");
       } else {
@@ -1396,14 +1410,14 @@ void GiaTriThamSo()
     idWebSite = 0;
   }
   if (isbtnSaveSetting) {
-     dmd.setBrightness(lightMatrix);
-     WriteConfig();
-     show("Save config");
+    dmd.setBrightness(lightMatrix);
+    WriteConfig();
+    show("Save config");
   } else if (isbtnSaveMessage) {
     show("Set btnSaveMessage: true");
     String strJson = "";
-//     object.printTo(strJson);
-//     show("object:" + strJson);
+    //     object.printTo(strJson);
+    //     show("object:" + strJson);
     JsonArray& array1 = parsed["arr"];
     bool isEdit = currentIndex < lengthMessage;
     if (isEdit) {
@@ -1419,16 +1433,16 @@ void GiaTriThamSo()
       parsed["arr"].printTo(strJson);
       show("arr:" + strJson);
     }
-//    show("object:" + strJson);
-//    parsed.printTo(strJson);
+    //    show("object:" + strJson);
+    //    parsed.printTo(strJson);
     // show(strJson);
-    if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
-      array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
-      show("Out EEPROM");
-    } else {
-      WriteConfig();
-      // ReadConfig();
-    }
+    #if !SPIFFS_MODE
+      if (strJson.length() > MAX_LENGTH_JSON_MESSAGE) {
+        array1.remove(array1.size() - 1); // Out EEPROM => revert array1.add(object);
+        show("Out EEPROM");
+      }
+    #endif
+      
     WriteConfig();
     show("Save config");
     refreshShowMessage();
@@ -1444,16 +1458,16 @@ void GiaTriThamSo()
   }
 
 }
-void handleNotFound(){
+void handleNotFound() {
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += server.uri();
   message += "\nMethod: ";
-  message += (server.method() == HTTP_GET)?"GET":"POST";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
   message += "\nArguments: ";
   message += server.args();
   message += "\n";
-  for (uint8_t i=0; i<server.args(); i++){
+  for (uint8_t i = 0; i < server.args(); i++) {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
   }
   server.send(404, "text/plain", message);
