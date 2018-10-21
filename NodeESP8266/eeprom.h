@@ -72,7 +72,7 @@ void SaveCharToEEPROM(char data,int address) {
  * Parameter : +address : address in EEPROM
  * Return: int.
  */
-int ReadCharFromEEPROM(char address) {
+char ReadCharFromEEPROM(int address) {
   return EEPROM.read(address);
 }
 
