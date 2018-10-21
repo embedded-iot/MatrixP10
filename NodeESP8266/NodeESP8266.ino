@@ -166,7 +166,7 @@ void setup()
   GPIO();
   idWebSite = 0;
   isLogin = false;
-  if (EEPROM.read(511) == EEPROM.read(0) || flagClear) {
+  if (EEPROM.read(511) == EEPROM.read(0) || !isExistsFile(DataFile) || flagClear) {
     Serial.println("ConfigDefault!");
     ClearEEPROM();
     ConfigDefault();
