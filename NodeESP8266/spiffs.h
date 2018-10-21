@@ -28,3 +28,6 @@ bool removeFile(String path) {
   }
   return false;
 }
+bool isExistsFile(String path) {
+  return SPIFFS.exists(path);
+}
