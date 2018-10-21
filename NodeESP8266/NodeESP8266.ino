@@ -24,6 +24,7 @@
 #include <DNSServer.h>
 // #include <WiFi.h>
 #include "eeprom.h"
+#include "spiffs.h"
 #include <ArduinoJson.h>
 
 #include <SPI.h>        //SPI.h must be included as DMD is written by SPI (the IDE complains otherwise)
@@ -73,7 +74,7 @@ DNSServer dnsServer;
 #define ADDR_PASS_LOGIN (ADDR_APPASS + 20)
 #define ADDR_JSON_MESSAGE (ADDR_PASS_LOGIN + 20)
 #define ADDR_TIME_NEXT_MSG 504 // 4 byte
-#define ADDR_LIGHT_MATRIX 510 // 1 byte
+#define ADDR_LIGHT_MATRIX 506 // 1 byte
 
 
 #define NAME_DEFAULT "MBELL"
@@ -166,6 +167,7 @@ void setup()
   idWebSite = 0;
   isLogin = false;
   if (EEPROM.read(511) == EEPROM.read(0) || flagClear) {
+    Serial.println("ConfigDefault!");
     ClearEEPROM();
     ConfigDefault();
     WriteConfig();
@@ -308,7 +310,7 @@ void onMotion() {
     dmd.marqueeScrollX(-1);
   } else if (currentMotion.equals("up")) {
     dmd.marqueeScrollY(1);
-  } else if (currentMotion.equals("bottom")) {
+  } else if (currentMotion.equals("down")) {
     dmd.marqueeScrollY(-1);
   } else if (currentMotion.equals("blink")) {
     if (countRepeat % 2 == 1) {
@@ -366,7 +368,7 @@ void matrixSeting(JsonObject& message) {
   }
   String strName = message["name"];
   if (strName.length() > 0) {
-    //     dmd.clearScreen(); // No clear screen when transfer next message.
+    dmd.clearScreen(); // No clear screen when transfer next message.
     String font = message["font"];
     nameMessage = dmd.ConvertStringToArrayChar(strName, false);
     strLengthMessage = dmd.stringWidth(string2char(strName), (uint8_t*)string2char(font));
@@ -474,37 +476,6 @@ boolean captivePortal() {
     return true;
   }
   return false;
-}
-String readFile(String fileName) {
-  // we could open the file
-  File f = SPIFFS.open(fileName, "r");
-  String content = "";
-  if (f) {
-    while (f.available()) {
-      content += f.readStringUntil('\n');
-    }
-    f.close();
-  }
-  return content;
-}
-bool writeFile(String fileName, String modeFile, String content) {
-  File f = SPIFFS.open(fileName.c_str(), modeFile.c_str());
-  if (f) {
-    //Write data to file
-    Serial.println("Open file!");
-    f.println(content);
-    f.close();  //Close file
-    return true;
-  }
-  return false;
-}
-void removeFile(String path) {
-  if (SPIFFS.remove(path)) {
-    show("Remove file "+ path);
-  } else {
-    show("Not exists " + path);
-  }
-
 }
 void GPIO()
 {
@@ -653,7 +624,7 @@ void ReadConfig()
   apPASS = ReadStringFromEEPROM(ADDR_APPASS);
   passLogin = ReadStringFromEEPROM(ADDR_PASS_LOGIN);
   timeNextMessage = ReadLongFromEEPROM(ADDR_TIME_NEXT_MSG);
-  lightMatrix = ReadCharFromEEPROM(LIGHT_MATRIX_DEFAULT);
+  lightMatrix = ReadCharFromEEPROM(ADDR_LIGHT_MATRIX);
   show("Read Config");
   show("Access Point: \n" + apSSID + "\n" + apPASS);
   show("Pass login: \n" + passLogin);
@@ -807,7 +778,7 @@ void matrixSetting() {
   String json = "{\"txtDisplayAcross\":" + String(DISPLAYS_ACROSS) + ",\
                 \"txtDisplayDown\":" + DISPLAYS_DOWN + ",\
                 \"txtLightMessage\":" + lightMatrix + ",\
-                \"txtMinLight\":" + String(1) + ",\
+                \"txtMinLight\":" + String(2) + ",\
                 \"txtMaxLight\":" + String(255) + "}";
   server.send(200, "application/json", json);
 }
@@ -920,7 +891,7 @@ void GiaTriThamSo()
 
       else if (Name.indexOf("txtIndexMessage") >= 0)
       {
-        currentIndex = Value.toInt();
+        currentIndex = (Value.toInt()) & 0xff;
         show("txtIndexMessage: " + String(currentIndex));
       }
       else if (Name.indexOf("txtAddMessage") >= 0)
@@ -965,7 +936,7 @@ void GiaTriThamSo()
       else if (Name.indexOf("txtLightMessage") >= 0) {
         if (Value.equals(String(lightMatrix)) == false) {
           lightMatrix = Value.toInt();
-          show("Set lightMatrix : " + Value);
+          show("Set lightMatrix : " + String(lightMatrix));
         }
       }
       else if (Name.indexOf("chboxMotionMessage") >= 0) {
